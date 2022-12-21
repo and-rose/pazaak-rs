@@ -1,3 +1,5 @@
+use std::fmt;
+
 pub struct Card {
     pub value: u8,
 }
@@ -27,11 +29,31 @@ impl Deck {
     }
 
     pub fn default_fill(&mut self) {
-        for i in 0..4 {
+        for _ in 0..4 {
             for i in 0..10 {
                 self.cards.push(Card { value: i });
             }
         }
+    }
+}
+
+impl fmt::Display for Deck {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut deck_string = String::new();
+
+        if &self.cards.len() == &0 {
+            return write!(f, "<Empty Deck>");
+        }
+
+        for i in 0..self.cards.len() {
+            deck_string.push_str(&self.cards[i].value.to_string());
+
+            if i != self.cards.len() - 1 {
+                deck_string.push_str(", ");
+            }
+        }
+
+        write!(f, "{}", deck_string)
     }
 }
 
