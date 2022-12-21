@@ -1,4 +1,5 @@
 mod cards;
+use colored::Colorize;
 
 use std::io::Write;
 
@@ -43,8 +44,13 @@ fn main() {
     println!("Board Deck has {} cards!", game.deck.cards.len());
 
     loop {
+        // Show Game State
         for j in 0..2 {
-            println!("P{} Deck: {}", j, game.players[j].deck);
+            println!(
+                "P{} Deck: {}",
+                j,
+                game.players[j].deck.to_string().italic().blue()
+            );
         }
         make_turn(&mut game);
     }

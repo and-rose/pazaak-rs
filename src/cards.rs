@@ -1,3 +1,4 @@
+use colored::Colorize;
 use rand::seq::SliceRandom;
 use std::fmt;
 
