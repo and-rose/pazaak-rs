@@ -1,3 +1,4 @@
+use rand::seq::SliceRandom;
 use std::fmt;
 
 pub struct Card {
@@ -20,7 +21,8 @@ impl Deck {
     }
 
     pub fn shuffle(&mut self) {
-        // Shuffle Deck
+        // Shuffle the deck
+        self.cards.shuffle(&mut rand::thread_rng());
     }
 
     pub fn draw(&mut self) -> Card {
@@ -100,6 +102,7 @@ impl Game {
         // Generate Game Deck
         let mut board_deck = Deck::new();
         board_deck.default_fill();
+        board_deck.shuffle();
 
         Game {
             players: [player1, player2],

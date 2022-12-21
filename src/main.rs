@@ -27,12 +27,13 @@ fn make_turn(game: &mut cards::Game) {
     for i in 0..2 {
         let player_deck = &mut game.players[i].deck;
 
-        let drawn_card = board_deck.cards.pop();
-
-        player_deck.cards.push(drawn_card.unwrap());
+        let drawn_card = board_deck.draw();
+        player_deck.cards.push(drawn_card);
 
         // Await player input
-        take_input(i);
+        let result = take_input(i);
+
+        println!("got -> {}", result);
     }
 }
 
