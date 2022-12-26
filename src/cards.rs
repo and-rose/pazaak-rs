@@ -79,6 +79,18 @@ pub struct Board {
     pub cards: Vec<Card>,
 }
 
+impl Board {
+    pub fn total(&self) -> u8 {
+        let mut total = 0;
+
+        for i in 0..self.cards.len() {
+            total += self.cards[i].value;
+        }
+
+        total
+    }
+}
+
 pub struct Game {
     pub players: [Player; 2],
     pub board: [Board; 2],
@@ -110,5 +122,32 @@ impl Game {
             board: [board1, board2],
             deck: board_deck,
         }
+    }
+}
+
+impl fmt::Display for Game {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut game_string = String::new();
+
+        // TODO: Implement Game Display
+        println!(
+            "            {}   {}
+               ┌─┐ ┌───────┐ ┌───────┐ ┌─┐
+               │ │ │       │ │       │ │ │
+               │ │ │       │ │       │ │ │
+               │ │ │       │ │       │ │ │
+               └─┘ │       │ │       │ └─┘
+                   │       │ │       │
+                   │       │ │       │
+                   │       │ │       │
+                   └───────┘ └───────┘
+                ┌──────────┤ ├──────────┐
+                │          │ │          │
+                └──────────┘ └──────────┘",
+            self.board[0].total(),
+            self.board[1].total()
+        );
+
+        write!(f, "{}", game_string)
     }
 }
