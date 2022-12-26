@@ -130,23 +130,23 @@ impl fmt::Display for Game {
         let mut game_string = String::new();
 
         // TODO: Implement Game Display
-        println!(
-            "            {}   {}
-               ┌─┐ ┌───────┐ ┌───────┐ ┌─┐
-               │ │ │       │ │       │ │ │
-               │ │ │       │ │       │ │ │
-               │ │ │       │ │       │ │ │
-               └─┘ │       │ │       │ └─┘
-                   │       │ │       │
-                   │       │ │       │
-                   │       │ │       │
-                   └───────┘ └───────┘
-                ┌──────────┤ ├──────────┐
-                │          │ │          │
-                └──────────┘ └──────────┘",
-            self.board[0].total(),
-            self.board[1].total()
-        );
+        game_string.push_str(&format!(
+            "           {}   {}
+┌─┐ ┌───────┐ ┌───────┐ ┌─┐
+│ │ │       │ │       │ │ │
+│ │ │       │ │       │ │ │
+│ │ │       │ │       │ │ │
+└─┘ │       │ │       │ └─┘
+    │       │ │       │
+    │       │ │       │
+    │       │ │       │
+    └───────┘ └───────┘
+ ┌──────────┐ ┌──────────┐
+ │          │ │          │
+ └──────────┘ └──────────┘",
+            self.board[0].total().to_string().blue(),
+            self.board[1].total().to_string().red()
+        ));
 
         write!(f, "{}", game_string)
     }

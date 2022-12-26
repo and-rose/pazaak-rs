@@ -1,61 +1,70 @@
-mod cards;
-mod messages;
-use colored::Colorize;
+use crossterm::{
+    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode},
+    execute,
+    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+};
+use std::{error::Error, io};
+use tui::{
+    backend::{Backend, CrosstermBackend},
+    layout::{Constraint, Direction, Layout},
+    widgets::{Block, Borders},
+    Frame, Terminal,
+};
 
-use std::io::Write;
+fn main() -> Result<(), Box<dyn Error>> {
+    // setup terminal
+    enable_raw_mode()?;
+    let mut stdout = io::stdout();
+    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = Terminal::new(backend)?;
 
-fn new_game() -> cards::Game {
-    let new_game = cards::Game::new();
+    // create app and run it
+    let res = run_app(&mut terminal);
 
-    new_game
-}
+    // restore terminal
+    disable_raw_mode()?;
+    execute!(
+        terminal.backend_mut(),
+        LeaveAlternateScreen,
+        DisableMouseCapture
+    )?;
+    terminal.show_cursor()?;
 
-fn take_input(player: usize) -> String {
-    let mut input = String::new();
-
-    print!("P{}> ", player);
-    std::io::stdout().flush().unwrap();
-
-    std::io::stdin()
-        .read_line(&mut input)
-        .expect("Failed to read line");
-
-    input
-}
-
-fn make_turn(game: &mut cards::Game) {
-    let board_deck = &mut game.deck;
-
-    for i in 0..2 {
-        let player_deck = &mut game.players[i].deck;
-
-        let drawn_card = board_deck.draw();
-        player_deck.cards.push(drawn_card);
-
-        // Await player input
-        let result = take_input(i);
-
-        println!("got -> {}", result);
+    if let Err(err) = res {
+        println!("{:?}", err)
     }
+
+    Ok(())
 }
 
-fn main() {
-    messages::print_welcome_message();
-
-    let mut game = new_game();
-
-    println!("Board Deck has {} cards!", game.deck.cards.len());
-
+fn run_app<B: Backend>(terminal: &mut Terminal<B>) -> io::Result<()> {
     loop {
-        // Show Game State
-        for j in 0..2 {
-            println!("{}", game.to_string());
-            println!(
-                "P{} Deck: {}",
-                j,
-                game.players[j].deck.to_string().italic().blue()
-            );
+        terminal.draw(|f| ui(f))?;
+
+        if let Event::Key(key) = event::read()? {
+            if let KeyCode::Char('q') = key.code {
+                return Ok(());
+            }
         }
-        make_turn(&mut game);
     }
+}
+
+fn ui<B: Backend>(f: &mut Frame<B>) {
+    let chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints(
+            [
+                Constraint::Percentage(10),
+                Constraint::Percentage(80),
+                Constraint::Percentage(10),
+            ]
+            .as_ref(),
+        )
+        .split(f.size());
+
+    let block = Block::default().title("Block").borders(Borders::ALL);
+    f.render_widget(block, chunks[0]);
+    let block = Block::default().title("Block 2").borders(Borders::ALL);
+    f.render_widget(block, chunks[2]);
 }
