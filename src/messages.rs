@@ -14,5 +14,4 @@ pub const PREPARING_NEXT_GAME_MESSAGE: &str = "Preparing next game...";
 pub fn print_welcome_message() {
     println!("{}", "===========================".blue().bold());
     println!("{}", WELCOME_MESSAGE.red().italic());
-    println!("{}", "===========================".blue().bold());
 }

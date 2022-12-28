@@ -92,7 +92,12 @@ fn player_number_to_identifier(player: usize) -> String {
 fn get_input(player: usize) -> Action {
     let mut input = String::new();
 
-    println!("What would you like to do? (stand, play, end)");
+    let input_indicator = format!("{}", "(stand, play, end)");
+
+    println!(
+        "What would you like to do? {}",
+        input_indicator.yellow().italic()
+    );
 
     print!("{}> ", player_number_to_identifier(player));
     std::io::stdout().flush().unwrap();
@@ -150,13 +155,19 @@ fn make_turn(game: &mut cards::Game) {
         print_action_log(i, Action::Draw);
 
         let mut is_finished = false;
+        let mut played_card = false;
 
         while !is_finished {
             print_board(&game.players, &game.board);
             // Await player input
             let result = get_input(i);
-            is_finished =
-                process_action(result, i, &mut game.players[i], &mut game.board[i], false);
+            (is_finished, played_card) = process_action(
+                result,
+                i,
+                &mut game.players[i],
+                &mut game.board[i],
+                played_card,
+            );
         }
     }
     game.turn = game.turn + 1;
@@ -172,9 +183,11 @@ fn print_hand_with_indexes(hand: &cards::Hand) {
 fn take_card_input(player: usize, hand: &cards::Hand) -> usize {
     let mut input = String::new();
 
+    let input_indicator = format!("(0-{})", hand.cards.len() - 1);
+
     println!(
-        "Which card would you like to play? (0-{})",
-        hand.cards.len() - 1
+        "Which card would you like to play? {}",
+        input_indicator.yellow().italic()
     );
 
     print_hand_with_indexes(hand);
@@ -204,7 +217,7 @@ fn process_action(
     player: &mut cards::Player,
     player_board: &mut cards::Board,
     already_played: bool,
-) -> bool {
+) -> (bool, bool) {
     match action {
         Action::Stand => {
             print_log(&get_action_message(player_number, action));
@@ -220,9 +233,10 @@ fn process_action(
 
                 player_board.cards.push(card);
 
-                return false;
+                return (false, true);
             } else {
                 print_log(messages::ALREADY_PLAYED_MESSAGE);
+                return (false, true);
             }
         }
         Action::EndTurn => {
@@ -233,7 +247,7 @@ fn process_action(
         }
     }
 
-    true
+    (true, false)
 }
 
 fn validate_deck_paths(paths: &[String]) {
@@ -300,6 +314,7 @@ fn main() {
 
         // Turn Logic
         loop {
+            println!("{}", "===========================".blue());
             println!("{}", pzk_match);
             let current_game = &mut pzk_match.games[current_game_index];
             make_turn(current_game);
