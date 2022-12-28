@@ -2,6 +2,7 @@ use crossterm::style::Stylize;
 use rand::seq::SliceRandom;
 use std::fmt;
 
+#[derive(Clone)]
 pub struct Card {
     pub value: i8,
 }
@@ -12,12 +13,23 @@ impl Card {
     }
 }
 
+impl fmt::Display for Card {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if &self.value > &0 {
+            write!(f, "{}", &self.value.to_string().dark_green())
+        } else {
+            write!(f, "{}", &self.value.to_string().dark_red())
+        }
+    }
+}
+
 pub struct SpecialCard {
     pub value: u8,
     pub effect: fn(),
     pub effect_test: String,
 }
 
+#[derive(Clone)]
 pub struct Deck {
     pub cards: Vec<Card>,
 }
@@ -66,6 +78,7 @@ impl fmt::Display for Deck {
     }
 }
 
+#[derive(Clone)]
 pub struct Hand {
     pub cards: Vec<Card>,
 }
@@ -104,7 +117,7 @@ impl fmt::Display for Hand {
         }
 
         for i in 0..self.cards.len() {
-            hand_string.push_str(&self.cards[i].value.to_string());
+            hand_string.push_str(&self.cards[i].to_string());
 
             if i != self.cards.len() - 1 {
                 hand_string.push_str(", ");
@@ -115,11 +128,21 @@ impl fmt::Display for Hand {
     }
 }
 
+#[derive(PartialEq, Clone)]
+pub enum Status {
+    Playing,
+    Standing,
+    Busted,
+}
+
+#[derive(Clone)]
 pub struct Player {
     pub hand: Hand,
     pub deck: Deck,
+    pub status: Status,
 }
 
+#[derive(Clone)]
 pub struct Board {
     pub cards: Vec<Card>,
 }
@@ -159,10 +182,8 @@ impl fmt::Display for Board {
 pub struct Game {
     pub players: [Player; 2],
     pub board: [Board; 2],
-    pub score: [u8; 2],
     pub deck: Deck,
     pub turn: u8,
-    pub round: u8,
     pub winner: u8,
 }
 
@@ -171,11 +192,13 @@ impl Game {
         let player1 = Player {
             hand: Hand::new(),
             deck: Deck::new(),
+            status: Status::Playing,
         };
 
         let player2 = Player {
             hand: Hand::new(),
             deck: Deck::new(),
+            status: Status::Playing,
         };
 
         let board1 = Board { cards: vec![] };
@@ -190,30 +213,64 @@ impl Game {
             players: [player1, player2],
             board: [board1, board2],
             deck: board_deck,
-            score: [0, 0],
             turn: 1,
-            round: 1,
             winner: 0,
+        }
+    }
+
+    // Check which player won the game by comparing the total of their boards and seeing who didn't bust
+    pub fn check_win(&mut self) -> Option<usize> {
+        let player1_total = self.board[0].total();
+        let player2_total = self.board[1].total();
+
+        if player1_total > player2_total && player1_total <= 20 {
+            self.winner = 1;
+            Some(0)
+        } else if player2_total > player1_total && player2_total <= 20 {
+            self.winner = 2;
+            Some(1)
+        } else {
+            self.winner = 0;
+            None
         }
     }
 }
 
-// Show Game State
-impl fmt::Display for Game {
+pub struct Match {
+    pub games: Vec<Game>,
+    pub round: usize,
+    pub score: [u8; 2],
+}
+
+impl Match {
+    pub fn new() -> Match {
+        Match {
+            games: vec![],
+            round: 1,
+            score: [0, 0],
+        }
+    }
+}
+
+impl fmt::Display for Match {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let mut game_string = String::new();
+        let mut match_string = String::new();
 
-        let game_details = format!("Round: {} | Turn: {}\n", self.round, self.turn);
+        let match_details = format!(
+            "Round: {} | Turn: {}\n",
+            self.round,
+            self.games[self.round - 1].turn
+        );
 
-        game_string.push_str(&format!("{}", game_details.blue()));
+        match_string.push_str(&format!("{}", match_details.blue()));
 
         let player1_details = format!("You: {}", self.score[0]);
         let player2_details = format!("Opponent: {}", self.score[1]);
 
-        game_string.push_str(&format!("{}", player1_details.green(),));
-        game_string.push_str(&format!("{}", "   | ".to_string().blue()));
-        game_string.push_str(&format!("{}", player2_details.red()));
+        match_string.push_str(&format!("{}", player1_details.green(),));
+        match_string.push_str(&format!("{}", "   | ".to_string().blue()));
+        match_string.push_str(&format!("{}", player2_details.red()));
 
-        write!(f, "{}", game_string)
+        write!(f, "{}", match_string)
     }
 }

@@ -1,13 +1,14 @@
 mod cards;
 mod messages;
 use cards::Deck;
+use core::time;
 use crossterm::style::Stylize;
-use std::{env, fmt, io::Write, process};
+use std::{env, fmt, io::Write, process, thread};
 
-fn new_game(player_deck: Deck, opponent_deck: Deck) -> cards::Game {
+fn new_game(player_deck: &Deck, opponent_deck: &Deck) -> cards::Game {
     let mut new_game = cards::Game::new();
-    new_game.players[0].deck = player_deck;
-    new_game.players[1].deck = opponent_deck;
+    new_game.players[0].deck = player_deck.clone();
+    new_game.players[1].deck = opponent_deck.clone();
 
     // Shuffle the decks
     new_game.players[0].deck.shuffle();
@@ -30,7 +31,8 @@ fn new_game(player_deck: Deck, opponent_deck: Deck) -> cards::Game {
 
 enum Action {
     Draw,
-    Stay,
+    Stand,
+    EndTurn,
     Play,
     TurnStart,
 }
@@ -39,9 +41,10 @@ impl fmt::Display for Action {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Action::Draw => write!(f, "Draw"),
-            Action::Stay => write!(f, "Stay"),
+            Action::Stand => write!(f, "Stand"),
             Action::Play => write!(f, "Play"),
             Action::TurnStart => write!(f, "Turn Start"),
+            Action::EndTurn => write!(f, "End Turn"),
         }
     }
 }
@@ -55,14 +58,17 @@ fn get_action_message(player: usize, action: Action) -> String {
         Action::Draw => {
             format!("{} Draws...", format!("Player {}", player + 1))
         }
-        Action::Stay => {
-            format!("{} Stays...", format!("Player {}", player + 1))
+        Action::Stand => {
+            format!("{} Stands...", format!("Player {}", player + 1))
         }
         Action::Play => {
             format!("{} Plays...", format!("Player {}", player + 1))
         }
         Action::TurnStart => {
             format!("Starting {}'s Turn...", format!("Player {}", player + 1))
+        }
+        Action::EndTurn => {
+            format!("Ending {}'s Turn...", format!("Player {}", player + 1))
         }
     };
 
@@ -74,16 +80,21 @@ fn print_action_log(player: usize, action: Action) {
     print_log(&message);
 }
 
-// Expecting a string of "draw", "stay", or "play" if it isn't one of those then it will return an error
+fn player_number_to_identifier(player: usize) -> String {
+    match player {
+        0 => String::from("You"),
+        1 => String::from("Opponent"),
+        _ => format!("Player {}", player + 1),
+    }
+}
+
+// Expecting a string of "draw", "Stand", or "play" if it isn't one of those then it will return an error
 fn get_input(player: usize) -> Action {
     let mut input = String::new();
 
-    match player {
-        0 => print!("You> "),
-        1 => print!("Opponent> "),
-        _ => print!("Player {}> ", player + 1),
-    }
+    println!("What would you like to do? (stand, play, end)");
 
+    print!("{}> ", player_number_to_identifier(player));
     std::io::stdout().flush().unwrap();
 
     std::io::stdin()
@@ -93,9 +104,9 @@ fn get_input(player: usize) -> Action {
     input = input.trim().to_string();
 
     match input.as_str() {
-        "draw" => Action::Draw,
-        "stay" => Action::Stay,
+        "stand" => Action::Stand,
         "play" => Action::Play,
+        "end" => Action::EndTurn,
         _ => {
             print_log(messages::INVALID_INPUT_MESSAGE);
             get_input(player)
@@ -123,67 +134,106 @@ fn print_board(players: &[cards::Player; 2], board: &[cards::Board; 2]) {
 
 fn make_turn(game: &mut cards::Game) {
     for i in 0..2 {
-        print_board(&game.players, &game.board);
         print_action_log(i, Action::TurnStart);
 
-        let player_deck = &mut game.players[i].deck;
+        // Skip turn if player is standing
+        if let cards::Status::Standing = game.players[i].status {
+            print_action_log(i, Action::Stand);
+            continue;
+        }
 
         let board_deck = &mut game.deck;
         let drawn_card = board_deck.draw();
+        let player_board = &mut game.board[i];
+        player_board.cards.push(drawn_card);
 
-        player_deck.cards.push(drawn_card);
+        print_action_log(i, Action::Draw);
 
-        // Await player input
-        let result = get_input(i);
+        let mut is_finished = false;
 
-        process_action(result, i, board_deck, player_deck, &mut game.board[i]);
+        while !is_finished {
+            print_board(&game.players, &game.board);
+            // Await player input
+            let result = get_input(i);
+            is_finished =
+                process_action(result, i, &mut game.players[i], &mut game.board[i], false);
+        }
     }
     game.turn = game.turn + 1;
 }
 
+// Show hand with indexes beside them
+fn print_hand_with_indexes(hand: &cards::Hand) {
+    for (i, card) in hand.cards.iter().enumerate() {
+        println!("{}: {}", i, card);
+    }
+}
+
+fn take_card_input(player: usize, hand: &cards::Hand) -> usize {
+    let mut input = String::new();
+
+    println!(
+        "Which card would you like to play? (0-{})",
+        hand.cards.len() - 1
+    );
+
+    print_hand_with_indexes(hand);
+
+    print!("{}> ", player_number_to_identifier(player));
+    std::io::stdout().flush().unwrap();
+
+    std::io::stdin()
+        .read_line(&mut input)
+        .expect("Failed to read line");
+
+    input = input.trim().to_string();
+
+    let card_index = input.parse::<usize>().unwrap();
+
+    if card_index > hand.cards.len() - 1 {
+        print_log(messages::INVALID_INPUT_MESSAGE);
+        take_card_input(player, hand)
+    } else {
+        card_index
+    }
+}
+
 fn process_action(
     action: Action,
-    player: usize,
-    board_deck: &mut cards::Deck,
-    player_deck: &mut cards::Deck,
+    player_number: usize,
+    player: &mut cards::Player,
     player_board: &mut cards::Board,
-) {
+    already_played: bool,
+) -> bool {
     match action {
-        Action::Draw => {
-            print_log(&get_action_message(player, action));
-
-            let drawn_card = board_deck.draw();
-            player_board.cards.push(drawn_card);
-        }
-        Action::Stay => {
-            print_log(&get_action_message(player, action));
+        Action::Stand => {
+            print_log(&get_action_message(player_number, action));
+            player.status = cards::Status::Standing;
         }
         Action::Play => {
-            print_log(&get_action_message(player, action));
+            if !already_played {
+                print_log(&get_action_message(player_number, action));
 
-            let mut input = String::new();
+                let card_index = take_card_input(player_number, &player.hand);
 
-            println!("What card would you like to play?");
+                let card = player.hand.cards.remove(card_index);
 
-            print!("Player {}> ", player + 1);
-            std::io::stdout().flush().unwrap();
+                player_board.cards.push(card);
 
-            std::io::stdin()
-                .read_line(&mut input)
-                .expect("Failed to read line");
-
-            input = input.trim().to_string();
-
-            let card_index = input.parse::<usize>().unwrap();
-
-            let card = player_deck.cards.remove(card_index - 1);
-
-            player_board.cards.push(card);
+                return false;
+            } else {
+                print_log(messages::ALREADY_PLAYED_MESSAGE);
+            }
+        }
+        Action::EndTurn => {
+            print_log(&get_action_message(player_number, action));
         }
         _ => {
-            print_log(&get_action_message(player, action));
+            print_log(&get_action_message(player_number, action));
         }
     }
+
+    true
 }
 
 fn validate_deck_paths(paths: &[String]) {
@@ -211,8 +261,7 @@ fn read_deck_file(path: &str) -> cards::Deck {
                 deck.cards.push(cards::Card::new(value));
             }
             Err(_) => {
-                print_log(messages::INVALID_DECK_FILE_MESSAGE);
-                print_log(path);
+                eprintln!("{} '{}'", messages::INVALID_DECK_FILE_MESSAGE, path);
                 process::exit(1);
             }
         }
@@ -239,13 +288,45 @@ fn main() {
 
     messages::print_welcome_message();
 
-    let player_deck = read_deck_file(player_deck_path);
-    let opponent_deck = read_deck_file(opponent_deck_path);
+    let player_deck = &read_deck_file(player_deck_path);
+    let opponent_deck = &read_deck_file(opponent_deck_path);
 
-    let mut game = new_game(player_deck, opponent_deck);
+    let mut pzk_match = cards::Match::new();
+    pzk_match.games.push(new_game(player_deck, opponent_deck));
 
-    loop {
-        println!("{}", game);
-        make_turn(&mut game);
+    // Host Match
+    while pzk_match.score[0] < 3 && pzk_match.score[1] < 3 {
+        let current_game_index = pzk_match.round - 1;
+
+        // Turn Logic
+        loop {
+            println!("{}", pzk_match);
+            let current_game = &mut pzk_match.games[current_game_index];
+            make_turn(current_game);
+            if current_game.players[0].status == cards::Status::Standing
+                && current_game.players[1].status == cards::Status::Standing
+            {
+                break;
+            }
+        }
+        // Post Game Logic
+        let winner = pzk_match.games[pzk_match.round - 1].check_win();
+        match winner {
+            Some(winner) => {
+                println!("{} wins!", player_number_to_identifier(winner));
+                pzk_match.score[winner] = pzk_match.score[winner] + 1;
+            }
+            None => println!("Draw!"),
+        }
+
+        // Wait 2000ms
+        thread::sleep(time::Duration::from_millis(2000));
+
+        pzk_match.round = pzk_match.round + 1;
+
+        // Prepare next game
+        print_log(messages::PREPARING_NEXT_GAME_MESSAGE);
+        println!("{}", "===========================".blue().bold());
+        pzk_match.games.push(new_game(player_deck, opponent_deck));
     }
 }
