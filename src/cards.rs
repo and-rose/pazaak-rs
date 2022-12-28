@@ -6,6 +6,12 @@ pub struct Card {
     pub value: u8,
 }
 
+impl Card {
+    pub fn new(value: u8) -> Card {
+        Card { value }
+    }
+}
+
 pub struct SpecialCard {
     pub value: u8,
     pub effect: fn(),
@@ -67,6 +73,25 @@ pub struct Hand {
 impl Hand {
     pub fn new() -> Hand {
         Hand { cards: vec![] }
+    }
+
+    // Gets a string of the hand but with the values hidden by question marks
+    pub fn get_anonymous_hand_string(&self) -> String {
+        let mut hand_string = String::new();
+
+        if &self.cards.len() == &0 {
+            return "<Empty Hand>".yellow().italic().to_string();
+        }
+
+        for i in 0..self.cards.len() {
+            hand_string.push_str("?");
+
+            if i != self.cards.len() - 1 {
+                hand_string.push_str(", ");
+            }
+        }
+
+        hand_string
     }
 }
 
@@ -174,7 +199,6 @@ impl Game {
 }
 
 // Show Game State
-
 impl fmt::Display for Game {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut game_string = String::new();

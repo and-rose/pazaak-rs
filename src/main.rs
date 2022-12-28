@@ -1,10 +1,16 @@
 mod cards;
 mod messages;
 use crossterm::style::Stylize;
-use std::{env, fmt, io::Write};
+use std::{env, fmt, io::Write, process};
 
 fn new_game() -> cards::Game {
-    let new_game = cards::Game::new();
+    let mut new_game = cards::Game::new();
+
+    // Both players draw 5 cards
+    for _ in 0..5 {
+        new_game.players[0].hand.cards.push(new_game.deck.draw());
+        new_game.players[1].hand.cards.push(new_game.deck.draw());
+    }
 
     new_game
 }
@@ -88,7 +94,10 @@ fn print_board(players: &[cards::Player; 2], board: &[cards::Board; 2]) {
     // Show Board State
     println!("{}", "---------------------------".blue().bold());
 
-    println!("Opponent Hand: {}", players[1].hand);
+    println!(
+        "Opponent Hand: {}",
+        players[1].hand.get_anonymous_hand_string()
+    );
     println!("Opponent Board: {}", board[1]);
 
     println!("{}", "~~~~~~~~~~~~~~~~~~~~~~~~~~~".blue().bold());
@@ -117,6 +126,21 @@ fn make_turn(game: &mut cards::Game) {
         process_action(result, i, board_deck, player_deck, &mut game.board[i]);
     }
     game.turn = game.turn + 1;
+}
+
+fn read_deck_file(path: &str) -> cards::Deck {
+    let mut deck = cards::Deck::new();
+
+    let file = std::fs::read_to_string(path).expect("Unable to read file");
+
+    for line in file.lines() {
+        let found_int: u8 = u8::from_str_radix(line, 10).expect("Unable to parse value");
+
+        let card = cards::Card::new(found_int);
+        deck.cards.push(card);
+    }
+
+    deck
 }
 
 fn process_action(
@@ -165,22 +189,25 @@ fn process_action(
 }
 
 fn validate_deck_paths(paths: &[String]) {
+    print_log("Validating Deck Paths...");
     for path in paths {
         if !std::path::Path::new(path).exists() {
-            panic!("{} {}", messages::INVALID_DECK_PATH_MESSAGE, path);
+            eprintln!("{} '{}'", messages::INVALID_DECK_PATH_MESSAGE, path);
+            process::exit(1);
         }
+        print_log(&format!("{} '{}'", "Found Deck Path:", path));
     }
+    print_log("Deck Paths Validated!");
 }
 
 fn main() {
     let args: Vec<String> = env::args().collect();
-    messages::print_welcome_message();
-
     let player_deck_path = &args[1];
     let opponent_deck_path = &args[2];
     let deck_paths = vec![player_deck_path.to_string(), opponent_deck_path.to_string()];
-
     validate_deck_paths(&deck_paths);
+
+    messages::print_welcome_message();
 
     let mut game = new_game();
 
