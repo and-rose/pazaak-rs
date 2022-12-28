@@ -3,11 +3,11 @@ use rand::seq::SliceRandom;
 use std::fmt;
 
 pub struct Card {
-    pub value: u8,
+    pub value: i8,
 }
 
 impl Card {
-    pub fn new(value: u8) -> Card {
+    pub fn new(value: i8) -> Card {
         Card { value }
     }
 }
@@ -125,7 +125,7 @@ pub struct Board {
 }
 
 impl Board {
-    pub fn total(&self) -> u8 {
+    pub fn total(&self) -> i8 {
         let mut total = 0;
 
         for i in 0..self.cards.len() {

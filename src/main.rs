@@ -1,15 +1,28 @@
 mod cards;
 mod messages;
+use cards::Deck;
 use crossterm::style::Stylize;
 use std::{env, fmt, io::Write, process};
 
-fn new_game() -> cards::Game {
+fn new_game(player_deck: Deck, opponent_deck: Deck) -> cards::Game {
     let mut new_game = cards::Game::new();
+    new_game.players[0].deck = player_deck;
+    new_game.players[1].deck = opponent_deck;
 
-    // Both players draw 5 cards
+    // Shuffle the decks
+    new_game.players[0].deck.shuffle();
+    new_game.players[1].deck.shuffle();
+
+    // Both players draw 5 cards from their player specific deck
     for _ in 0..5 {
-        new_game.players[0].hand.cards.push(new_game.deck.draw());
-        new_game.players[1].hand.cards.push(new_game.deck.draw());
+        new_game.players[0]
+            .hand
+            .cards
+            .push(new_game.players[0].deck.draw());
+        new_game.players[1]
+            .hand
+            .cards
+            .push(new_game.players[1].deck.draw());
     }
 
     new_game
@@ -94,16 +107,16 @@ fn print_board(players: &[cards::Player; 2], board: &[cards::Board; 2]) {
     // Show Board State
     println!("{}", "---------------------------".blue().bold());
 
+    println!("Opponent Board: {}", board[1]);
     println!(
         "Opponent Hand: {}",
         players[1].hand.get_anonymous_hand_string()
     );
-    println!("Opponent Board: {}", board[1]);
 
     println!("{}", "~~~~~~~~~~~~~~~~~~~~~~~~~~~".blue().bold());
 
-    println!("Your Hand: {}", players[0].hand);
     println!("Your Board: {}", board[0]);
+    println!("Your Hand: {}", players[0].hand);
 
     println!("{}", "---------------------------".blue().bold());
 }
@@ -126,21 +139,6 @@ fn make_turn(game: &mut cards::Game) {
         process_action(result, i, board_deck, player_deck, &mut game.board[i]);
     }
     game.turn = game.turn + 1;
-}
-
-fn read_deck_file(path: &str) -> cards::Deck {
-    let mut deck = cards::Deck::new();
-
-    let file = std::fs::read_to_string(path).expect("Unable to read file");
-
-    for line in file.lines() {
-        let found_int: u8 = u8::from_str_radix(line, 10).expect("Unable to parse value");
-
-        let card = cards::Card::new(found_int);
-        deck.cards.push(card);
-    }
-
-    deck
 }
 
 fn process_action(
@@ -200,8 +198,40 @@ fn validate_deck_paths(paths: &[String]) {
     print_log("Deck Paths Validated!");
 }
 
+fn read_deck_file(path: &str) -> cards::Deck {
+    let mut deck = cards::Deck::new();
+
+    let file = std::fs::read_to_string(path).expect("Unable to read file");
+
+    for line in file.lines() {
+        let found_int = line.parse::<i8>();
+
+        match found_int {
+            Ok(value) => {
+                deck.cards.push(cards::Card::new(value));
+            }
+            Err(_) => {
+                print_log(messages::INVALID_DECK_FILE_MESSAGE);
+                print_log(path);
+                process::exit(1);
+            }
+        }
+    }
+
+    deck
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
+
+    if args.len() < 3 {
+        eprintln!(
+            "{} {}",
+            messages::INVALID_ARGUMENTS_MESSAGE,
+            messages::USAGE_MESSAGE
+        );
+        process::exit(1);
+    }
     let player_deck_path = &args[1];
     let opponent_deck_path = &args[2];
     let deck_paths = vec![player_deck_path.to_string(), opponent_deck_path.to_string()];
@@ -209,7 +239,10 @@ fn main() {
 
     messages::print_welcome_message();
 
-    let mut game = new_game();
+    let player_deck = read_deck_file(player_deck_path);
+    let opponent_deck = read_deck_file(opponent_deck_path);
+
+    let mut game = new_game(player_deck, opponent_deck);
 
     loop {
         println!("{}", game);
