@@ -1,70 +1,191 @@
-use crossterm::{
-    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode},
-    execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
-};
-use std::{error::Error, io};
-use tui::{
-    backend::{Backend, CrosstermBackend},
-    layout::{Constraint, Direction, Layout},
-    widgets::{Block, Borders},
-    Frame, Terminal,
-};
+mod cards;
+mod messages;
+use crossterm::style::Stylize;
+use std::{env, fmt, io::Write};
 
-fn main() -> Result<(), Box<dyn Error>> {
-    // setup terminal
-    enable_raw_mode()?;
-    let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
-    let backend = CrosstermBackend::new(stdout);
-    let mut terminal = Terminal::new(backend)?;
+fn new_game() -> cards::Game {
+    let new_game = cards::Game::new();
 
-    // create app and run it
-    let res = run_app(&mut terminal);
-
-    // restore terminal
-    disable_raw_mode()?;
-    execute!(
-        terminal.backend_mut(),
-        LeaveAlternateScreen,
-        DisableMouseCapture
-    )?;
-    terminal.show_cursor()?;
-
-    if let Err(err) = res {
-        println!("{:?}", err)
-    }
-
-    Ok(())
+    new_game
 }
 
-fn run_app<B: Backend>(terminal: &mut Terminal<B>) -> io::Result<()> {
-    loop {
-        terminal.draw(|f| ui(f))?;
+enum Action {
+    Draw,
+    Stay,
+    Play,
+    TurnStart,
+}
 
-        if let Event::Key(key) = event::read()? {
-            if let KeyCode::Char('q') = key.code {
-                return Ok(());
-            }
+impl fmt::Display for Action {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Action::Draw => write!(f, "Draw"),
+            Action::Stay => write!(f, "Stay"),
+            Action::Play => write!(f, "Play"),
+            Action::TurnStart => write!(f, "Turn Start"),
         }
     }
 }
 
-fn ui<B: Backend>(f: &mut Frame<B>) {
-    let chunks = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints(
-            [
-                Constraint::Percentage(10),
-                Constraint::Percentage(80),
-                Constraint::Percentage(10),
-            ]
-            .as_ref(),
-        )
-        .split(f.size());
+fn print_log(message: &str) {
+    println!("{} {}", "~".dark_grey(), message.dark_grey());
+}
 
-    let block = Block::default().title("Block").borders(Borders::ALL);
-    f.render_widget(block, chunks[0]);
-    let block = Block::default().title("Block 2").borders(Borders::ALL);
-    f.render_widget(block, chunks[2]);
+fn get_action_message(player: usize, action: Action) -> String {
+    let message = match action {
+        Action::Draw => {
+            format!("{} Draws...", format!("Player {}", player + 1))
+        }
+        Action::Stay => {
+            format!("{} Stays...", format!("Player {}", player + 1))
+        }
+        Action::Play => {
+            format!("{} Plays...", format!("Player {}", player + 1))
+        }
+        Action::TurnStart => {
+            format!("Starting {}'s Turn...", format!("Player {}", player + 1))
+        }
+    };
+
+    message
+}
+
+fn print_action_log(player: usize, action: Action) {
+    let message = get_action_message(player, action);
+    print_log(&message);
+}
+
+// Expecting a string of "draw", "stay", or "play" if it isn't one of those then it will return an error
+fn get_input(player: usize) -> Action {
+    let mut input = String::new();
+
+    match player {
+        0 => print!("You> "),
+        1 => print!("Opponent> "),
+        _ => print!("Player {}> ", player + 1),
+    }
+
+    std::io::stdout().flush().unwrap();
+
+    std::io::stdin()
+        .read_line(&mut input)
+        .expect("Failed to read line");
+
+    input = input.trim().to_string();
+
+    match input.as_str() {
+        "draw" => Action::Draw,
+        "stay" => Action::Stay,
+        "play" => Action::Play,
+        _ => {
+            print_log(messages::INVALID_INPUT_MESSAGE);
+            get_input(player)
+        }
+    }
+}
+
+fn print_board(players: &[cards::Player; 2], board: &[cards::Board; 2]) {
+    // Show Board State
+    println!("{}", "---------------------------".blue().bold());
+
+    println!("Opponent Hand: {}", players[1].hand);
+    println!("Opponent Board: {}", board[1]);
+
+    println!("{}", "~~~~~~~~~~~~~~~~~~~~~~~~~~~".blue().bold());
+
+    println!("Your Hand: {}", players[0].hand);
+    println!("Your Board: {}", board[0]);
+
+    println!("{}", "---------------------------".blue().bold());
+}
+
+fn make_turn(game: &mut cards::Game) {
+    for i in 0..2 {
+        print_board(&game.players, &game.board);
+        print_action_log(i, Action::TurnStart);
+
+        let player_deck = &mut game.players[i].deck;
+
+        let board_deck = &mut game.deck;
+        let drawn_card = board_deck.draw();
+
+        player_deck.cards.push(drawn_card);
+
+        // Await player input
+        let result = get_input(i);
+
+        process_action(result, i, board_deck, player_deck, &mut game.board[i]);
+    }
+    game.turn = game.turn + 1;
+}
+
+fn process_action(
+    action: Action,
+    player: usize,
+    board_deck: &mut cards::Deck,
+    player_deck: &mut cards::Deck,
+    player_board: &mut cards::Board,
+) {
+    match action {
+        Action::Draw => {
+            print_log(&get_action_message(player, action));
+
+            let drawn_card = board_deck.draw();
+            player_board.cards.push(drawn_card);
+        }
+        Action::Stay => {
+            print_log(&get_action_message(player, action));
+        }
+        Action::Play => {
+            print_log(&get_action_message(player, action));
+
+            let mut input = String::new();
+
+            println!("What card would you like to play?");
+
+            print!("Player {}> ", player + 1);
+            std::io::stdout().flush().unwrap();
+
+            std::io::stdin()
+                .read_line(&mut input)
+                .expect("Failed to read line");
+
+            input = input.trim().to_string();
+
+            let card_index = input.parse::<usize>().unwrap();
+
+            let card = player_deck.cards.remove(card_index - 1);
+
+            player_board.cards.push(card);
+        }
+        _ => {
+            print_log(&get_action_message(player, action));
+        }
+    }
+}
+
+fn validate_deck_paths(paths: &[String]) {
+    for path in paths {
+        if !std::path::Path::new(path).exists() {
+            panic!("{} {}", messages::INVALID_DECK_PATH_MESSAGE, path);
+        }
+    }
+}
+
+fn main() {
+    let args: Vec<String> = env::args().collect();
+    messages::print_welcome_message();
+
+    let player_deck_path = &args[1];
+    let opponent_deck_path = &args[2];
+    let deck_paths = vec![player_deck_path.to_string(), opponent_deck_path.to_string()];
+
+    validate_deck_paths(&deck_paths);
+
+    let mut game = new_game();
+
+    loop {
+        println!("{}", game);
+        make_turn(&mut game);
+    }
 }

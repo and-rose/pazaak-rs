@@ -1,7 +1,12 @@
-pub fn print_welcome_message() {
-    const welcome_message: &str = "Welcome to pazaak-rs!";
+use crossterm::style::Stylize;
 
-    println!("=====================");
-    println!("{}", welcome_message);
-    println!("=====================");
+// String templates for messages
+const WELCOME_MESSAGE: &str = "Welcome to pazaak-rs!";
+pub const INVALID_INPUT_MESSAGE: &str = "Invalid input, please try again.";
+pub const INVALID_DECK_PATH_MESSAGE: &str = "Invalid deck path, please try again.";
+
+pub fn print_welcome_message() {
+    println!("{}", "===========================".blue().bold());
+    println!("{}", WELCOME_MESSAGE.red().italic());
+    println!("{}", "===========================".blue().bold());
 }
