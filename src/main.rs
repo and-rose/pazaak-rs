@@ -1,33 +1,8 @@
 mod cards;
 mod messages;
-use cards::Deck;
 use core::time;
 use crossterm::style::Stylize;
 use std::{env, fmt, io::Write, process, thread};
-
-fn new_game(player_deck: &Deck, opponent_deck: &Deck) -> cards::Game {
-    let mut new_game = cards::Game::new();
-    new_game.players[0].deck = player_deck.clone();
-    new_game.players[1].deck = opponent_deck.clone();
-
-    // Shuffle the decks
-    new_game.players[0].deck.shuffle();
-    new_game.players[1].deck.shuffle();
-
-    // Both players draw 5 cards from their player specific deck
-    for _ in 0..5 {
-        new_game.players[0]
-            .hand
-            .cards
-            .push(new_game.players[0].deck.draw());
-        new_game.players[1]
-            .hand
-            .cards
-            .push(new_game.players[1].deck.draw());
-    }
-
-    new_game
-}
 
 enum Action {
     Draw,
@@ -51,6 +26,13 @@ impl fmt::Display for Action {
 
 fn print_log(message: &str) {
     println!("{} {}", "~".dark_grey(), message.dark_grey());
+    thread::sleep(time::Duration::from_millis(150));
+}
+
+fn print_action_log(player: usize, action: Action) {
+    let message = get_action_message(player, action);
+    print_log(&message);
+    thread::sleep(time::Duration::from_millis(250));
 }
 
 fn get_action_message(player: usize, action: Action) -> String {
@@ -73,11 +55,6 @@ fn get_action_message(player: usize, action: Action) -> String {
     };
 
     message
-}
-
-fn print_action_log(player: usize, action: Action) {
-    let message = get_action_message(player, action);
-    print_log(&message);
 }
 
 fn player_number_to_identifier(player: usize) -> String {
@@ -302,21 +279,19 @@ fn main() {
 
     messages::print_welcome_message();
 
-    let player_deck = &read_deck_file(player_deck_path);
-    let opponent_deck = &read_deck_file(opponent_deck_path);
-
     let mut pzk_match = cards::Match::new();
-    pzk_match.games.push(new_game(player_deck, opponent_deck));
 
     // Host Match
     while pzk_match.score[0] < 3 && pzk_match.score[1] < 3 {
-        let current_game_index = pzk_match.round - 1;
+        let player_deck = read_deck_file(player_deck_path);
+        let opponent_deck = read_deck_file(opponent_deck_path);
+        pzk_match.new_game(player_deck, opponent_deck);
 
         // Turn Logic
         loop {
             println!("{}", "===========================".blue());
             println!("{}", pzk_match);
-            let current_game = &mut pzk_match.games[current_game_index];
+            let current_game = pzk_match.current_game();
             make_turn(current_game);
             if current_game.players[0].status == cards::Status::Standing
                 && current_game.players[1].status == cards::Status::Standing
@@ -335,13 +310,17 @@ fn main() {
         }
 
         // Wait 2000ms
-        thread::sleep(time::Duration::from_millis(2000));
+        thread::sleep(time::Duration::from_millis(750));
+    }
 
-        pzk_match.round = pzk_match.round + 1;
-
-        // Prepare next game
-        print_log(messages::PREPARING_NEXT_GAME_MESSAGE);
-        println!("{}", "===========================".blue().bold());
-        pzk_match.games.push(new_game(player_deck, opponent_deck));
+    // Post Match Logic
+    println!("{}", "===========================".blue());
+    println!("{}", pzk_match);
+    let winner = pzk_match.check_win();
+    match winner {
+        Some(winner) => {
+            println!("{} wins!", player_number_to_identifier(winner));
+        }
+        None => println!("Draw!"),
     }
 }

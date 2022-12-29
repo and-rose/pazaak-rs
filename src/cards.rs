@@ -23,10 +23,17 @@ impl fmt::Display for Card {
     }
 }
 
+enum SpecialType {
+    Flip,
+    Swap,
+    Double,
+    TieBreaker,
+}
+
 pub struct SpecialCard {
     pub value: u8,
     pub effect: fn(),
-    pub effect_test: String,
+    pub effect_text: String,
 }
 
 #[derive(Clone)]
@@ -188,16 +195,16 @@ pub struct Game {
 }
 
 impl Game {
-    pub fn new() -> Game {
+    pub fn new(deck1: Deck, deck2: Deck) -> Game {
         let player1 = Player {
             hand: Hand::new(),
-            deck: Deck::new(),
+            deck: deck1,
             status: Status::Playing,
         };
 
         let player2 = Player {
             hand: Hand::new(),
-            deck: Deck::new(),
+            deck: deck2,
             status: Status::Playing,
         };
 
@@ -223,19 +230,32 @@ impl Game {
         let player1_total = self.board[0].total();
         let player2_total = self.board[1].total();
 
-        if player1_total > player2_total && player1_total <= 20 {
-            self.winner = 1;
-            Some(0)
-        } else if player2_total > player1_total && player2_total <= 20 {
-            self.winner = 2;
-            Some(1)
+        let player1_distance = 20 - player1_total;
+        let player2_distance = 20 - player2_total;
+
+        if player1_distance < 0 && player2_distance < 0 {
+            // Both players busted
+            return None;
+        } else if player1_distance < 0 {
+            // Player 1 busted
+            return Some(1);
+        } else if player2_distance < 0 {
+            // Player 2 busted
+            return Some(0);
+        } else if player1_distance < player2_distance {
+            // Player 1 is closer to 20
+            return Some(0);
+        } else if player2_distance < player1_distance {
+            // Player 2 is closer to 20
+            return Some(1);
         } else {
-            self.winner = 0;
-            None
+            // Both players are equally close to 20
+            return None;
         }
     }
 }
 
+// has a vector of mutably borrowed games
 pub struct Match {
     pub games: Vec<Game>,
     pub round: usize,
@@ -246,8 +266,49 @@ impl Match {
     pub fn new() -> Match {
         Match {
             games: vec![],
-            round: 1,
+            round: 0,
             score: [0, 0],
+        }
+    }
+
+    pub fn new_game(&mut self, player_deck: Deck, opponent_deck: Deck) {
+        let mut new_game = Game::new(player_deck, opponent_deck);
+
+        // Shuffle the decks
+        new_game.players[0].deck.shuffle();
+        new_game.players[1].deck.shuffle();
+
+        // Both players draw 5 cards from their player specific deck
+        for _ in 0..5 {
+            new_game.players[0]
+                .hand
+                .cards
+                .push(new_game.players[0].deck.draw());
+            new_game.players[1]
+                .hand
+                .cards
+                .push(new_game.players[1].deck.draw());
+        }
+
+        // add the game to the match
+        self.games.push(new_game);
+
+        // Increment the round
+        self.round += 1;
+    }
+
+    pub fn current_game(&mut self) -> &mut Game {
+        &mut self.games[self.round - 1]
+    }
+
+    // Check which player won the match by reaching 3 points
+    pub fn check_win(&mut self) -> Option<usize> {
+        if self.score[0] == 3 {
+            return Some(0);
+        } else if self.score[1] == 3 {
+            return Some(1);
+        } else {
+            return None;
         }
     }
 }
