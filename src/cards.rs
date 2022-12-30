@@ -3,13 +3,27 @@ use rand::seq::SliceRandom;
 use std::fmt;
 
 #[derive(Clone)]
+pub enum SpecialType {
+    Flip,
+    Swap,
+    Double,
+    TieBreaker,
+}
+
+#[derive(Clone)]
 pub struct Card {
     pub value: i8,
+    pub special_type: Option<SpecialType>,
+    pub board_effect: Option<fn()>,
 }
 
 impl Card {
     pub fn new(value: i8) -> Card {
-        Card { value }
+        Card {
+            value,
+            special_type: None,
+            board_effect: None,
+        }
     }
 }
 
@@ -23,17 +37,10 @@ impl fmt::Display for Card {
     }
 }
 
-enum SpecialType {
-    Flip,
-    Swap,
-    Double,
-    TieBreaker,
-}
-
 pub struct SpecialCard {
-    pub value: u8,
+    pub value: Option<Vec<u8>>,
+    pub special_type: SpecialType,
     pub effect: fn(),
-    pub effect_text: String,
 }
 
 #[derive(Clone)]
@@ -59,7 +66,11 @@ impl Deck {
     pub fn default_fill(&mut self) {
         for _ in 0..4 {
             for i in 0..10 {
-                self.cards.push(Card { value: i + 1 });
+                self.cards.push(Card {
+                    value: i + 1,
+                    special_type: None,
+                    board_effect: None,
+                });
             }
         }
     }

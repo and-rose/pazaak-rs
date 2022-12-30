@@ -1,5 +1,6 @@
 mod cards;
 mod messages;
+mod util;
 use core::time;
 use crossterm::style::Stylize;
 use std::{env, fmt, io::Write, process, thread};
