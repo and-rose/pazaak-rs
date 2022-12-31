@@ -1,9 +1,12 @@
 mod cards;
 mod messages;
 mod util;
+use cards::{Board, SpecialType};
 use core::time;
 use crossterm::style::Stylize;
+use regex::Regex;
 use std::{env, fmt, io::Write, process, thread};
+use util::SPECIAL_CARD_REGEXES;
 
 enum Action {
     Draw,
@@ -126,7 +129,7 @@ fn make_turn(game: &mut cards::Game) {
         }
 
         let board_deck = &mut game.deck;
-        let drawn_card = board_deck.draw();
+        let drawn_card = board_deck.draw().expect(messages::DECK_EMPTY);
         let player_board = &mut game.board[i];
         player_board.cards.push(drawn_card);
 
@@ -240,23 +243,113 @@ fn validate_deck_paths(paths: &[String]) {
     print_log("Deck Paths Validated!");
 }
 
+fn create_card_from_string(card_string: &str) -> Option<cards::Card> {
+    // Check each regex for a match
+    // If a match is found, create a card based on the regex
+    // If no match is found, return an error
+    // If multiple matches are found, return an error
+
+    for (card_type, regex) in SPECIAL_CARD_REGEXES.iter() {
+        // println!("{:?}: {}", card_type, regex);
+        let regex_string = Regex::new(regex).unwrap_or_else(|_| {
+            eprintln!("{} '{}'", "fail", regex);
+            process::exit(1);
+        });
+        if regex_string.is_match(card_string) {
+            // Create a card based on the regex
+            match card_type {
+                SpecialType::None => {
+                    // Create a card based on the regex
+                    let value = regex_string
+                        .captures(card_string)
+                        .unwrap()
+                        .get(1)
+                        .unwrap()
+                        .as_str()
+                        .parse::<i8>()
+                        .unwrap();
+
+                    return Some(cards::Card::new(value));
+                }
+                SpecialType::Flip => {
+                    // Create a card based on the two groups in the first match
+                    let captures = regex_string.captures(card_string).unwrap();
+                    let values: Vec<i8> = captures
+                        .iter()
+                        .skip(1)
+                        .map(|x| x.unwrap().as_str().parse::<i8>().unwrap())
+                        .collect();
+
+                    return Some(cards::Card {
+                        values_list: values,
+                        value: 0,
+                        special_type: *card_type,
+                        board_effect: Some(|board| {}),
+                    });
+                }
+                SpecialType::Swap => {
+                    // Create a card based on the regex
+                    let captures = regex_string.captures(card_string).unwrap();
+                    let values: Vec<i8> = captures
+                        .iter()
+                        .skip(1)
+                        .map(|x| x.unwrap().as_str().parse::<i8>().unwrap())
+                        .collect();
+
+                    return Some(cards::Card {
+                        values_list: values,
+                        value: 0,
+                        special_type: *card_type,
+                        board_effect: Some(|board| {}),
+                    });
+                }
+                SpecialType::Double => {
+                    // Create a card based on the regex
+
+                    return Some(cards::Card {
+                        values_list: vec![0],
+                        value: 0,
+                        special_type: *card_type,
+                        board_effect: Some(|board| {}),
+                    });
+                }
+                SpecialType::TieBreaker => {
+                    // Create a card based on the regex
+                    let captures = regex_string.captures(card_string).unwrap();
+                    let values: Vec<i8> = captures
+                        .iter()
+                        .skip(1)
+                        .map(|x| x.unwrap().as_str().parse::<i8>().unwrap())
+                        .collect();
+
+                    return Some(cards::Card {
+                        values_list: values,
+                        value: 0,
+                        special_type: *card_type,
+                        board_effect: Some(|board| {}),
+                    });
+                }
+            }
+        }
+    }
+
+    println!("No match found for '{}'", card_string);
+
+    None
+}
+
 fn read_deck_file(path: &str) -> cards::Deck {
     let mut deck = cards::Deck::new();
 
     let file = std::fs::read_to_string(path).expect("Unable to read file");
 
-    for line in file.lines() {
-        let found_int = line.parse::<i8>();
+    // Various card types
 
-        match found_int {
-            Ok(value) => {
-                deck.cards.push(cards::Card::new(value));
-            }
-            Err(_) => {
-                eprintln!("{} '{}'", messages::INVALID_DECK_FILE_MESSAGE, path);
-                process::exit(1);
-            }
-        }
+    for line in file.lines() {
+        // create a card based on the regex form of the card
+        let card = create_card_from_string(line)
+            .expect(&format!("Unable to create card from string for {}", line));
+        deck.cards.push(card);
     }
 
     deck

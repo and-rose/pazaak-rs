@@ -2,8 +2,11 @@ use crossterm::style::Stylize;
 use rand::seq::SliceRandom;
 use std::fmt;
 
-#[derive(Clone)]
+use crate::messages;
+
+#[derive(Clone, Copy, Hash, PartialEq, Eq, Debug)]
 pub enum SpecialType {
+    None,
     Flip,
     Swap,
     Double,
@@ -12,16 +15,18 @@ pub enum SpecialType {
 
 #[derive(Clone)]
 pub struct Card {
+    pub values_list: Vec<i8>,
     pub value: i8,
-    pub special_type: Option<SpecialType>,
-    pub board_effect: Option<fn()>,
+    pub special_type: SpecialType,
+    pub board_effect: Option<fn(&mut Board)>,
 }
 
 impl Card {
     pub fn new(value: i8) -> Card {
         Card {
+            values_list: vec![value],
             value,
-            special_type: None,
+            special_type: SpecialType::None,
             board_effect: None,
         }
     }
@@ -29,11 +34,33 @@ impl Card {
 
 impl fmt::Display for Card {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if &self.value > &0 {
-            write!(f, "{}", &self.value.to_string().dark_green())
-        } else {
-            write!(f, "{}", &self.value.to_string().dark_red())
+        let mut card_string = String::new();
+
+        match self.special_type {
+            SpecialType::None => {
+                card_string.push_str(&self.value.to_string());
+            }
+            SpecialType::Flip => {
+                card_string.push_str(&format!(
+                    "{:+}/{:+}",
+                    self.values_list[0], self.values_list[1]
+                ));
+            }
+            SpecialType::Swap => {
+                card_string.push_str(&format!("{}&{}", self.values_list[0], self.values_list[1]));
+            }
+            SpecialType::Double => {
+                card_string.push_str("D");
+            }
+            SpecialType::TieBreaker => {
+                card_string.push_str(&format!(
+                    "{:+}/{:+}T",
+                    self.values_list[0], self.values_list[1]
+                ));
+            }
         }
+
+        write!(f, "{}", card_string)
     }
 }
 
@@ -58,17 +85,18 @@ impl Deck {
         self.cards.shuffle(&mut rand::thread_rng());
     }
 
-    pub fn draw(&mut self) -> Card {
-        // Draw Card
-        self.cards.pop().unwrap()
+    pub fn draw(&mut self) -> Option<Card> {
+        // Draw Card from deck and return none if deck is empty
+        self.cards.pop()
     }
 
     pub fn default_fill(&mut self) {
         for _ in 0..4 {
             for i in 0..10 {
                 self.cards.push(Card {
+                    values_list: vec![i + 1],
                     value: i + 1,
-                    special_type: None,
+                    special_type: SpecialType::None,
                     board_effect: None,
                 });
             }
@@ -85,7 +113,7 @@ impl fmt::Display for Deck {
         }
 
         for i in 0..self.cards.len() {
-            deck_string.push_str(&self.cards[i].value.to_string());
+            deck_string.push_str(&self.cards[i].to_string());
 
             if i != self.cards.len() - 1 {
                 deck_string.push_str(", ");
@@ -186,7 +214,7 @@ impl fmt::Display for Board {
         }
 
         for i in 0..self.cards.len() {
-            board_string.push_str(&self.cards[i].value.to_string());
+            board_string.push_str(&self.cards[i].to_string());
 
             if i != self.cards.len() - 1 {
                 board_string.push_str(", ");
@@ -294,11 +322,11 @@ impl Match {
             new_game.players[0]
                 .hand
                 .cards
-                .push(new_game.players[0].deck.draw());
+                .push(new_game.players[0].deck.draw().expect(messages::DECK_EMPTY));
             new_game.players[1]
                 .hand
                 .cards
-                .push(new_game.players[1].deck.draw());
+                .push(new_game.players[1].deck.draw().expect(messages::DECK_EMPTY));
         }
 
         // add the game to the match
