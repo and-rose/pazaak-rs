@@ -5,7 +5,7 @@ use cards::{Board, SpecialType};
 use core::time;
 use crossterm::style::Stylize;
 use regex::Regex;
-use std::{env, fmt, io::Write, process, thread};
+use std::{collections::HashSet, env, fmt, io::Write, process, thread};
 use util::SPECIAL_CARD_REGEXES;
 
 enum Action {
@@ -154,10 +154,13 @@ fn make_turn(game: &mut cards::Game) {
     game.turn = game.turn + 1;
 }
 
-// Show hand with indexes beside them
-fn print_hand_with_indexes(hand: &cards::Hand) {
-    for (i, card) in hand.cards.iter().enumerate() {
-        println!("{}: {}", i, card);
+// Show iterable object with indexes
+fn print_options_with_index<T>(vector: &Vec<T>)
+where
+    T: fmt::Display,
+{
+    for (i, object) in vector.iter().enumerate() {
+        println!("{}: {:+}", i, object);
     }
 }
 
@@ -171,7 +174,7 @@ fn take_card_input(player: usize, hand: &cards::Hand) -> usize {
         input_indicator.yellow().italic()
     );
 
-    print_hand_with_indexes(hand);
+    print_options_with_index(&hand.cards);
 
     print!("{}> ", player_number_to_identifier(player));
     std::io::stdout().flush().unwrap();
@@ -192,6 +195,40 @@ fn take_card_input(player: usize, hand: &cards::Hand) -> usize {
     }
 }
 
+// Presents the player with the available methods of playing a card and takes their input
+fn take_playstyle_input(player_number: usize, special_card: &cards::Card) -> usize {
+    // Display the available options in the cards values with the index beside them
+
+    let available_options = special_card.values_list.len();
+    let input_indicator = format!("(0-{})", available_options - 1);
+
+    println!(
+        "How would you like to play this card? {}",
+        input_indicator.yellow().italic()
+    );
+    print_options_with_index(&special_card.values_list);
+
+    let mut input = String::new();
+
+    print!("{}> ", player_number_to_identifier(player_number));
+    std::io::stdout().flush().unwrap();
+
+    std::io::stdin()
+        .read_line(&mut input)
+        .expect("Failed to read line");
+
+    input = input.trim().to_string();
+
+    let playstyle_index = input.parse::<usize>().unwrap();
+
+    if playstyle_index > special_card.values_list.len() - 1 {
+        print_log(messages::INVALID_INPUT_MESSAGE);
+        take_playstyle_input(player_number, special_card)
+    } else {
+        playstyle_index
+    }
+}
+
 fn process_action(
     action: Action,
     player_number: usize,
@@ -209,6 +246,23 @@ fn process_action(
                 print_log(&get_action_message(player_number, action));
 
                 let card_index = take_card_input(player_number, &player.hand);
+                let card = &mut player.hand.cards[card_index];
+
+                let additional_input_cards: HashSet<SpecialType> =
+                    [SpecialType::Flip, SpecialType::TieBreaker]
+                        .iter()
+                        .cloned()
+                        .collect();
+
+                if additional_input_cards.contains(&card.special_type) {
+                    let result = take_playstyle_input(player_number, &card);
+
+                    card.resolve_value(result);
+                }
+
+                let values_list = card.values_list.clone();
+
+                (card.board_effect.as_ref().unwrap())(player_board, values_list);
 
                 let card = player.hand.cards.remove(card_index);
 
@@ -284,10 +338,10 @@ fn create_card_from_string(card_string: &str) -> Option<cards::Card> {
                         values_list: values,
                         value: 0,
                         special_type: *card_type,
-                        board_effect: Some(|board| {}),
+                        board_effect: Some(|board, values_list: Vec<i8>| {}),
                     });
                 }
-                SpecialType::Swap => {
+                SpecialType::Invert => {
                     // Create a card based on the regex
                     let captures = regex_string.captures(card_string).unwrap();
                     let values: Vec<i8> = captures
@@ -300,21 +354,26 @@ fn create_card_from_string(card_string: &str) -> Option<cards::Card> {
                         values_list: values,
                         value: 0,
                         special_type: *card_type,
-                        board_effect: Some(|board| {}),
+                        board_effect: Some(|board, values_list| {
+                            println!("applying invert to {}", board);
+                            for card in &mut board.cards {
+                                if values_list.contains(&card.value) {
+                                    card.value *= -1;
+                                }
+                            }
+                        }),
                     });
                 }
                 SpecialType::Double => {
-                    // Create a card based on the regex
-
+                    // This is the only card that allows playing twice in a row
                     return Some(cards::Card {
                         values_list: vec![0],
                         value: 0,
                         special_type: *card_type,
-                        board_effect: Some(|board| {}),
+                        board_effect: Some(|board, values_list| {}),
                     });
                 }
                 SpecialType::TieBreaker => {
-                    // Create a card based on the regex
                     let captures = regex_string.captures(card_string).unwrap();
                     let values: Vec<i8> = captures
                         .iter()
@@ -326,7 +385,7 @@ fn create_card_from_string(card_string: &str) -> Option<cards::Card> {
                         values_list: values,
                         value: 0,
                         special_type: *card_type,
-                        board_effect: Some(|board| {}),
+                        board_effect: Some(|board, values_list| {}),
                     });
                 }
             }

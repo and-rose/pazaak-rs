@@ -8,7 +8,7 @@ use crate::messages;
 pub enum SpecialType {
     None,
     Flip,
-    Swap,
+    Invert,
     Double,
     TieBreaker,
 }
@@ -18,7 +18,7 @@ pub struct Card {
     pub values_list: Vec<i8>,
     pub value: i8,
     pub special_type: SpecialType,
-    pub board_effect: Option<fn(&mut Board)>,
+    pub board_effect: Option<fn(&mut Board, Vec<i8>)>,
 }
 
 impl Card {
@@ -30,6 +30,10 @@ impl Card {
             board_effect: None,
         }
     }
+
+    pub fn resolve_value(&mut self, index: usize) {
+        self.value = self.values_list[index];
+    }
 }
 
 impl fmt::Display for Card {
@@ -39,26 +43,60 @@ impl fmt::Display for Card {
         match self.special_type {
             SpecialType::None => {
                 card_string.push_str(&self.value.to_string());
+
+                if &self.value > &0 {
+                    card_string = card_string.green().to_string();
+                } else if &self.value < &0 {
+                    card_string = card_string.red().to_string();
+                }
             }
             SpecialType::Flip => {
-                card_string.push_str(&format!(
-                    "{:+}/{:+}",
-                    self.values_list[0], self.values_list[1]
-                ));
+                // put parentheses around the list item that matches the value
+                for (i, v) in self.values_list.iter().enumerate() {
+                    if *v == self.value {
+                        card_string.push_str(&format!("[{:+}]", v));
+                    } else {
+                        card_string.push_str(&format!("{:+}", v));
+                    }
+
+                    if i != self.values_list.len() - 1 {
+                        card_string.push_str("/");
+                    }
+                }
+
+                card_string = card_string.blue().to_string();
             }
-            SpecialType::Swap => {
+            SpecialType::Invert => {
                 card_string.push_str(&format!("{}&{}", self.values_list[0], self.values_list[1]));
+
+                card_string = card_string.yellow().to_string();
             }
             SpecialType::Double => {
                 card_string.push_str("D");
+
+                card_string = card_string.yellow().to_string();
             }
             SpecialType::TieBreaker => {
-                card_string.push_str(&format!(
-                    "{:+}/{:+}T",
-                    self.values_list[0], self.values_list[1]
-                ));
+                // put parentheses around the list item that matches the value
+                for (i, v) in self.values_list.iter().enumerate() {
+                    if *v == self.value {
+                        card_string.push_str(&format!("[{:+}]", v));
+                    } else {
+                        card_string.push_str(&format!("{:+}", v));
+                    }
+
+                    if i != self.values_list.len() - 1 {
+                        card_string.push_str("/");
+                    }
+                }
+
+                card_string.push_str("T");
+
+                card_string = card_string.blue().to_string();
             }
         }
+
+        // Colouring
 
         write!(f, "{}", card_string)
     }
