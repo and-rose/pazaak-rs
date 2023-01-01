@@ -102,12 +102,6 @@ impl fmt::Display for Card {
     }
 }
 
-pub struct SpecialCard {
-    pub value: Option<Vec<u8>>,
-    pub special_type: SpecialType,
-    pub effect: fn(),
-}
-
 #[derive(Clone)]
 pub struct Deck {
     pub cards: Vec<Card>,
@@ -224,6 +218,7 @@ pub struct Player {
     pub hand: Hand,
     pub deck: Deck,
     pub status: Status,
+    pub double_next_card: bool,
 }
 
 #[derive(Clone)]
@@ -277,12 +272,14 @@ impl Game {
             hand: Hand::new(),
             deck: deck1,
             status: Status::Playing,
+            double_next_card: false,
         };
 
         let player2 = Player {
             hand: Hand::new(),
             deck: deck2,
             status: Status::Playing,
+            double_next_card: false,
         };
 
         let board1 = Board { cards: vec![] };

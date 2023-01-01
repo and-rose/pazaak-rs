@@ -1,7 +1,7 @@
 mod cards;
 mod messages;
 mod util;
-use cards::{Board, SpecialType};
+use cards::SpecialType;
 use core::time;
 use crossterm::style::Stylize;
 use regex::Regex;
@@ -262,11 +262,27 @@ fn process_action(
 
                 let values_list = card.values_list.clone();
 
-                (card.board_effect.as_ref().unwrap())(player_board, values_list);
+                // if the card has a board effect, apply it
+                if let Some(board_effect) = card.board_effect {
+                    board_effect(player_board, values_list);
+                }
 
-                let card = player.hand.cards.remove(card_index);
+                let mut card = player.hand.cards.remove(card_index);
+                let card_type = card.special_type.clone();
+
+                if player.double_next_card {
+                    player.double_next_card = false;
+                    card.value = card.value * 2;
+                }
 
                 player_board.cards.push(card);
+
+                if card_type == SpecialType::Double {
+                    // Ask the player what card they want to double
+                    print_log(messages::DOUBLE_CARD_MESSAGE);
+                    player.double_next_card = true;
+                    return (false, false);
+                }
 
                 return (false, true);
             } else {
@@ -338,7 +354,7 @@ fn create_card_from_string(card_string: &str) -> Option<cards::Card> {
                         values_list: values,
                         value: 0,
                         special_type: *card_type,
-                        board_effect: Some(|board, values_list: Vec<i8>| {}),
+                        board_effect: None,
                     });
                 }
                 SpecialType::Invert => {
@@ -370,7 +386,7 @@ fn create_card_from_string(card_string: &str) -> Option<cards::Card> {
                         values_list: vec![0],
                         value: 0,
                         special_type: *card_type,
-                        board_effect: Some(|board, values_list| {}),
+                        board_effect: None,
                     });
                 }
                 SpecialType::TieBreaker => {
@@ -385,7 +401,7 @@ fn create_card_from_string(card_string: &str) -> Option<cards::Card> {
                         values_list: values,
                         value: 0,
                         special_type: *card_type,
-                        board_effect: Some(|board, values_list| {}),
+                        board_effect: None,
                     });
                 }
             }
