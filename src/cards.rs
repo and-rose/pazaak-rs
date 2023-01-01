@@ -236,6 +236,16 @@ impl Board {
 
         total
     }
+
+    pub fn has_tiebreaker(&self) -> bool {
+        for i in 0..self.cards.len() {
+            if self.cards[i].special_type == SpecialType::TieBreaker {
+                return true;
+            }
+        }
+
+        false
+    }
 }
 
 impl fmt::Display for Board {
@@ -322,13 +332,20 @@ impl Game {
         } else if player2_distance < player1_distance {
             // Player 2 is closer to 20
             return Some(1);
+        } else if player1_distance == player2_distance {
+            // Players are tied
+            if self.board[0].has_tiebreaker() {
+                return Some(0);
+            } else if self.board[1].has_tiebreaker() {
+                return Some(1);
+            } else {
+                return None;
+            }
         } else {
-            // Both players are equally close to 20
             return None;
         }
     }
 }
-
 // has a vector of mutably borrowed games
 pub struct Match {
     pub games: Vec<Game>,
