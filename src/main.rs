@@ -13,6 +13,7 @@ enum Action {
     Stand,
     EndTurn,
     Play,
+    Cancel,
     TurnStart,
 }
 
@@ -24,6 +25,7 @@ impl fmt::Display for Action {
             Action::Play => write!(f, "Play"),
             Action::TurnStart => write!(f, "Turn Start"),
             Action::EndTurn => write!(f, "End Turn"),
+            Action::Cancel => write!(f, "Cancel"),
         }
     }
 }
@@ -55,6 +57,12 @@ fn get_action_message(player: usize, action: Action) -> String {
         }
         Action::EndTurn => {
             format!("Ending {}'s Turn...", format!("Player {}", player + 1))
+        }
+        Action::Cancel => {
+            format!(
+                "Cancelling {}'s current action...",
+                format!("Player {}", player + 1)
+            )
         }
     };
 
@@ -164,10 +172,10 @@ where
     }
 }
 
-fn take_card_input(player: usize, hand: &cards::Hand) -> usize {
+fn take_card_input(player: usize, hand: &cards::Hand) -> Option<usize> {
     let mut input = String::new();
 
-    let input_indicator = format!("(0-{})", hand.cards.len() - 1);
+    let input_indicator = format!("(0-{}, cancel)", hand.cards.len() - 1);
 
     println!(
         "Which card would you like to play? {}",
@@ -185,22 +193,26 @@ fn take_card_input(player: usize, hand: &cards::Hand) -> usize {
 
     input = input.trim().to_string();
 
+    if input == "cancel" {
+        return None;
+    }
+
     let card_index = input.parse::<usize>().unwrap();
 
     if card_index > hand.cards.len() - 1 {
         print_log(messages::INVALID_INPUT_MESSAGE);
         take_card_input(player, hand)
     } else {
-        card_index
+        Some(card_index)
     }
 }
 
 // Presents the player with the available methods of playing a card and takes their input
-fn take_playstyle_input(player_number: usize, special_card: &cards::Card) -> usize {
+fn take_playstyle_input(player_number: usize, special_card: &cards::Card) -> Option<usize> {
     // Display the available options in the cards values with the index beside them
 
     let available_options = special_card.values_list.len();
-    let input_indicator = format!("(0-{})", available_options - 1);
+    let input_indicator = format!("(0-{}, cancel)", available_options - 1);
 
     println!(
         "How would you like to play this card? {}",
@@ -219,13 +231,18 @@ fn take_playstyle_input(player_number: usize, special_card: &cards::Card) -> usi
 
     input = input.trim().to_string();
 
+    // Check if the user cancelled the input
+    if input == "cancel" {
+        return None;
+    }
+
     let playstyle_index = input.parse::<usize>().unwrap();
 
     if playstyle_index > special_card.values_list.len() - 1 {
         print_log(messages::INVALID_INPUT_MESSAGE);
         take_playstyle_input(player_number, special_card)
     } else {
-        playstyle_index
+        Some(playstyle_index)
     }
 }
 
@@ -246,45 +263,60 @@ fn process_action(
                 print_log(&get_action_message(player_number, action));
 
                 let card_index = take_card_input(player_number, &player.hand);
-                let card = &mut player.hand.cards[card_index];
 
-                let additional_input_cards: HashSet<SpecialType> =
-                    [SpecialType::Flip, SpecialType::TieBreaker]
-                        .iter()
-                        .cloned()
-                        .collect();
+                match card_index {
+                    Some(card_index) => {
+                        let card = &mut player.hand.cards[card_index];
 
-                if additional_input_cards.contains(&card.special_type) {
-                    let result = take_playstyle_input(player_number, &card);
+                        let additional_input_cards: HashSet<SpecialType> =
+                            [SpecialType::Flip, SpecialType::TieBreaker]
+                                .iter()
+                                .cloned()
+                                .collect();
 
-                    card.resolve_value(result);
+                        if additional_input_cards.contains(&card.special_type) {
+                            let result = take_playstyle_input(player_number, &card);
+
+                            match result {
+                                Some(result) => {
+                                    card.resolve_value(result);
+                                }
+                                None => {
+                                    return (false, false);
+                                }
+                            }
+                        }
+
+                        let values_list = card.values_list.clone();
+
+                        // if the card has a board effect, apply it
+                        if let Some(board_effect) = card.board_effect {
+                            board_effect(player_board, values_list);
+                        }
+
+                        let mut card = player.hand.cards.remove(card_index);
+                        let card_type = card.special_type.clone();
+
+                        if player.double_next_card {
+                            player.double_next_card = false;
+                            card.value = card.value * 2;
+                        }
+
+                        player_board.cards.push(card);
+
+                        if card_type == SpecialType::Double {
+                            // Ask the player what card they want to double
+                            print_log(messages::DOUBLE_CARD_MESSAGE);
+                            player.double_next_card = true;
+                            return (false, false);
+                        }
+
+                        return (false, true);
+                    }
+                    None => {
+                        return (false, false);
+                    }
                 }
-
-                let values_list = card.values_list.clone();
-
-                // if the card has a board effect, apply it
-                if let Some(board_effect) = card.board_effect {
-                    board_effect(player_board, values_list);
-                }
-
-                let mut card = player.hand.cards.remove(card_index);
-                let card_type = card.special_type.clone();
-
-                if player.double_next_card {
-                    player.double_next_card = false;
-                    card.value = card.value * 2;
-                }
-
-                player_board.cards.push(card);
-
-                if card_type == SpecialType::Double {
-                    // Ask the player what card they want to double
-                    print_log(messages::DOUBLE_CARD_MESSAGE);
-                    player.double_next_card = true;
-                    return (false, false);
-                }
-
-                return (false, true);
             } else {
                 print_log(messages::ALREADY_PLAYED_MESSAGE);
                 return (false, true);
@@ -292,6 +324,10 @@ fn process_action(
         }
         Action::EndTurn => {
             print_log(&get_action_message(player_number, action));
+        }
+        Action::Cancel => {
+            print_log(&get_action_message(player_number, action));
+            return (false, false);
         }
         _ => {
             print_log(&get_action_message(player_number, action));
@@ -371,7 +407,6 @@ fn create_card_from_string(card_string: &str) -> Option<cards::Card> {
                         value: 0,
                         special_type: *card_type,
                         board_effect: Some(|board, values_list| {
-                            println!("applying invert to {}", board);
                             for card in &mut board.cards {
                                 if values_list.contains(&card.value) {
                                     card.value *= -1;
