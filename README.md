@@ -40,7 +40,15 @@ Special cards are a bit more complicated. They can be played to increase or decr
     - Extremely similar to a `Flip` card, the `TieBreaker` card can be played to increase or decrease the value of the board. However, if the player's board total is equal to their opponent's board total, the `TieBreaker` card will promote the player to win the round.
 
 ## Side Decks
-Side Decks are a collection pre-determined cards chosen by the player before gamestart. These cards may be played during a turn to manipulate their board. Side Decks are to be loaded from a .pzk file passed as a CLI argument. 
+Side Decks are a collection pre-determined cards chosen by the player before gamestart. These cards may be played during a turn to manipulate their board. Side Decks are to be loaded from a .pzk file passed as a CLI argument. When building a deck you will only have access to the following cards:
+- 12 blue ‘+’ cards, ranging 1-6
+- 12 red ‘-’ cards, ranging 1-6
+- 12 blue and red ‘+/-’ cards, ranging 1-6
+- 2 yellow ‘2&4’ flip cards
+- 2 yellow ‘3&6’ flip cards
+- 1 yellow ‘+/-1/2’ card
+- 1 yellow ‘double’ card
+- 1 yellow ‘tiebreak’ card
 
 Side Decks are represented by a text file with the following format:
 ```
@@ -62,6 +70,7 @@ If a round ends in a tie, no player will receive a point. If a player wins a rou
 
 
 # Future Plans
+- [ ] Add 'fill the table' win condition
 - [ ] Restrict deck contents
   - Restrict number of special cards
   - Limit TieBreaker cards to +1/-1T
