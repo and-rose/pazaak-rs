@@ -2,8 +2,6 @@ use crossterm::style::Stylize;
 use rand::seq::SliceRandom;
 use std::fmt;
 
-use crate::messages;
-
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Debug)]
 pub enum SpecialType {
     None,
@@ -11,6 +9,18 @@ pub enum SpecialType {
     Invert,
     Double,
     TieBreaker,
+}
+
+impl fmt::Display for SpecialType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            SpecialType::None => write!(f, "None"),
+            SpecialType::Flip => write!(f, "Flip"),
+            SpecialType::Invert => write!(f, "Invert"),
+            SpecialType::Double => write!(f, "Double"),
+            SpecialType::TieBreaker => write!(f, "TieBreaker"),
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -215,14 +225,13 @@ pub enum Status {
     Busted,
 }
 
+// player takes a mutable deck
 #[derive(Clone)]
 pub struct Player {
     pub hand: Hand,
     pub deck: Deck,
     pub status: Status,
-    pub double_next_card: bool,
 }
-
 #[derive(Clone)]
 pub struct Board {
     pub cards: Vec<Card>,
@@ -270,8 +279,8 @@ impl fmt::Display for Board {
     }
 }
 // A Game is a collection of players, boards, and a deck
+#[derive(Clone)]
 pub struct Game {
-    pub players: [Player; 2],
     pub board: [Board; 2],
     pub deck: Deck,
     pub turn: u8,
@@ -279,21 +288,7 @@ pub struct Game {
 }
 
 impl Game {
-    pub fn new(deck1: Deck, deck2: Deck) -> Game {
-        let player1 = Player {
-            hand: Hand::new(),
-            deck: deck1,
-            status: Status::Playing,
-            double_next_card: false,
-        };
-
-        let player2 = Player {
-            hand: Hand::new(),
-            deck: deck2,
-            status: Status::Playing,
-            double_next_card: false,
-        };
-
+    pub fn new() -> Game {
         let board1 = Board { cards: vec![] };
         let board2 = Board { cards: vec![] };
 
@@ -303,7 +298,6 @@ impl Game {
         board_deck.shuffle();
 
         Game {
-            players: [player1, player2],
             board: [board1, board2],
             deck: board_deck,
             turn: 1,
@@ -348,57 +342,65 @@ impl Game {
         }
     }
 }
-// has a vector of mutably borrowed games
+
+#[derive(Clone)]
 pub struct Match {
     pub games: Vec<Game>,
-    pub round: usize,
-    pub score: [u8; 2],
+    pub players: [Player; 2],
+    pub match_detail: MatchDetails,
 }
 
 impl Match {
-    pub fn new() -> Match {
+    pub fn new(mut deck1: Deck, mut deck2: Deck) -> Match {
+        let mut player_hand = Hand::new();
+        let mut opponent_hand = Hand::new();
+
+        for _ in 0..4 {
+            player_hand.cards.push(deck1.draw().unwrap());
+            opponent_hand.cards.push(deck2.draw().unwrap());
+        }
+
         Match {
             games: vec![],
-            round: 0,
-            score: [0, 0],
+            players: [
+                Player {
+                    hand: player_hand,
+                    deck: deck1,
+                    status: Status::Playing,
+                },
+                Player {
+                    hand: opponent_hand,
+                    deck: deck2,
+                    status: Status::Playing,
+                },
+            ],
+            match_detail: MatchDetails::new(),
         }
     }
 
-    pub fn new_game(&mut self, player_deck: Deck, opponent_deck: Deck) {
-        let mut new_game = Game::new(player_deck, opponent_deck);
+    pub fn new_game(&mut self) {
+        let new_game = Game::new();
 
-        // Shuffle the decks
-        new_game.players[0].deck.shuffle();
-        new_game.players[1].deck.shuffle();
-
-        // Both players draw 5 cards from their player specific deck
-        for _ in 0..5 {
-            new_game.players[0]
-                .hand
-                .cards
-                .push(new_game.players[0].deck.draw().expect(messages::DECK_EMPTY));
-            new_game.players[1]
-                .hand
-                .cards
-                .push(new_game.players[1].deck.draw().expect(messages::DECK_EMPTY));
-        }
+        // Reset the players' statuses
+        self.players[0].status = Status::Playing;
+        self.players[1].status = Status::Playing;
 
         // add the game to the match
         self.games.push(new_game);
 
         // Increment the round
-        self.round += 1;
+        self.match_detail.round += 1;
     }
 
     pub fn current_game(&mut self) -> &mut Game {
-        &mut self.games[self.round - 1]
+        &mut self.games[self.match_detail.round - 1]
     }
 
     // Check which player won the match by reaching 3 points
     pub fn check_win(&mut self) -> Option<usize> {
-        if self.score[0] == 3 {
+        if self.match_detail.score[0] == 3 {
             return Some(0);
-        } else if self.score[1] == 3 {
+        } else if self.match_detail.score[1] == 3 {
             return Some(1);
         } else {
             return None;
@@ -408,22 +410,63 @@ impl Match {
 
 impl fmt::Display for Match {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut game_string = String::new();
+        let current_game = &self.games[self.match_detail.round - 1];
+
+        game_string.push_str(&format!(
+            "{}",
+            "---------------------------\n".blue().bold()
+        ));
+        game_string.push_str(&format!("Opponent Board: {}\n", current_game.board[1]));
+        game_string.push_str(&format!(
+            "Opponent Hand: {}\n",
+            &self.players[1].hand.get_anonymous_hand_string()
+        ));
+        game_string.push_str(&format!(
+            "{}",
+            "~~~~~~~~~~~~~~~~~~~~~~~~~~~\n".blue().bold()
+        ));
+        game_string.push_str(&format!("Your Board: {}\n", current_game.board[0]));
+        game_string.push_str(&format!("Your Hand: {}\n", &self.players[0].hand));
+        game_string.push_str(&format!("{}", "---------------------------".blue().bold()));
+
+        write!(f, "{}", game_string)
+    }
+}
+
+#[derive(Clone)]
+pub struct MatchDetails {
+    pub round: usize,
+    pub score: [u8; 2],
+}
+
+impl MatchDetails {
+    pub fn new() -> MatchDetails {
+        MatchDetails {
+            round: 0,
+            score: [0, 0],
+        }
+    }
+}
+
+impl fmt::Display for MatchDetails {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut match_string = String::new();
 
-        let match_details = format!(
-            "Round: {} | Turn: {}\n",
-            self.round,
-            self.games[self.round - 1].turn
-        );
-
-        match_string.push_str(&format!("{}", match_details.blue()));
-
-        let player1_details = format!("You: {}", self.score[0]);
-        let player2_details = format!("Opponent: {}", self.score[1]);
-
-        match_string.push_str(&format!("{}", player1_details.green(),));
-        match_string.push_str(&format!("{}", "   | ".to_string().blue()));
-        match_string.push_str(&format!("{}", player2_details.red()));
+        match_string.push_str(&format!(
+            "{}",
+            "---------------------------\n".blue().bold()
+        ));
+        match_string.push_str(&format!(
+            "Round: {}\n",
+            self.round.to_string().yellow().bold()
+        ));
+        match_string.push_str(&format!(
+            "You: {}  | Opponent: {}\n",
+            self.score[0].to_string().green().bold(),
+            self.score[1].to_string().red().bold()
+        ));
+        match_string.push_str(&format!("{}", "---------------------------".blue().bold()));
 
         write!(f, "{}", match_string)
     }

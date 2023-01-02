@@ -1,73 +1,20 @@
 mod cards;
 mod messages;
 mod util;
-use cards::SpecialType;
+
+use cards::{Match, SpecialType};
 use core::time;
 use crossterm::style::Stylize;
 use regex::Regex;
-use std::{collections::HashSet, env, fmt, io::Write, process, thread};
-use util::SPECIAL_CARD_REGEXES;
+use std::{
+    collections::{HashMap, HashSet},
+    env,
+    io::Write,
+    process, thread,
+};
+use util::{get_action_message, print_action_log, print_log, Action, SPECIAL_CARD_REGEXES};
 
-enum Action {
-    Draw,
-    Stand,
-    EndTurn,
-    Play,
-    Cancel,
-    TurnStart,
-}
-
-impl fmt::Display for Action {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Action::Draw => write!(f, "Draw"),
-            Action::Stand => write!(f, "Stand"),
-            Action::Play => write!(f, "Play"),
-            Action::TurnStart => write!(f, "Turn Start"),
-            Action::EndTurn => write!(f, "End Turn"),
-            Action::Cancel => write!(f, "Cancel"),
-        }
-    }
-}
-
-fn print_log(message: &str) {
-    println!("{} {}", "~".dark_grey(), message.dark_grey());
-    thread::sleep(time::Duration::from_millis(150));
-}
-
-fn print_action_log(player: usize, action: Action) {
-    let message = get_action_message(player, action);
-    print_log(&message);
-    thread::sleep(time::Duration::from_millis(250));
-}
-
-fn get_action_message(player: usize, action: Action) -> String {
-    let message = match action {
-        Action::Draw => {
-            format!("{} Draws...", format!("Player {}", player + 1))
-        }
-        Action::Stand => {
-            format!("{} Stands...", format!("Player {}", player + 1))
-        }
-        Action::Play => {
-            format!("{} Plays...", format!("Player {}", player + 1))
-        }
-        Action::TurnStart => {
-            format!("Starting {}'s Turn...", format!("Player {}", player + 1))
-        }
-        Action::EndTurn => {
-            format!("Ending {}'s Turn...", format!("Player {}", player + 1))
-        }
-        Action::Cancel => {
-            format!(
-                "Cancelling {}'s current action...",
-                format!("Player {}", player + 1)
-            )
-        }
-    };
-
-    message
-}
+use crate::util::print_options_with_index;
 
 fn player_number_to_identifier(player: usize) -> String {
     match player {
@@ -108,38 +55,19 @@ fn get_input(player: usize) -> Action {
     }
 }
 
-fn print_board(players: &[cards::Player; 2], board: &[cards::Board; 2]) {
-    // Show Board State
-    println!("{}", "---------------------------".blue().bold());
-
-    println!("Opponent Board: {}", board[1]);
-    println!(
-        "Opponent Hand: {}",
-        players[1].hand.get_anonymous_hand_string()
-    );
-
-    println!("{}", "~~~~~~~~~~~~~~~~~~~~~~~~~~~".blue().bold());
-
-    println!("Your Board: {}", board[0]);
-    println!("Your Hand: {}", players[0].hand);
-
-    println!("{}", "---------------------------".blue().bold());
-}
-
-fn make_turn(game: &mut cards::Game) {
+fn make_turn(pazaak_match: &mut Match) {
     for i in 0..2 {
         print_action_log(i, Action::TurnStart);
 
-        // Skip turn if player is standing
-        if let cards::Status::Standing = game.players[i].status {
+        // Skip if player is standing
+        if let cards::Status::Standing = pazaak_match.players[i].status {
             print_action_log(i, Action::Stand);
             continue;
         }
 
-        let board_deck = &mut game.deck;
-        let drawn_card = board_deck.draw().expect(messages::DECK_EMPTY);
-        let player_board = &mut game.board[i];
-        player_board.cards.push(drawn_card);
+        // Draw a card to the player's board from the board deck
+        let drawn_card = pazaak_match.current_game().deck.draw().unwrap();
+        pazaak_match.current_game().board[i].cards.push(drawn_card);
 
         print_action_log(i, Action::Draw);
 
@@ -147,40 +75,25 @@ fn make_turn(game: &mut cards::Game) {
         let mut played_card = false;
 
         while !is_finished {
-            print_board(&game.players, &game.board);
-            // Await player input
-            let result = get_input(i);
-            (is_finished, played_card) = process_action(
-                result,
-                i,
-                &mut game.players[i],
-                &mut game.board[i],
-                played_card,
-            );
+            println!("{}", pazaak_match);
+
+            // Get the player's input
+            let action = get_input(i);
+            (is_finished, played_card) = process_action(action, i, pazaak_match, played_card);
         }
 
-        // Check if player has busted
-        if game.players[i].status == cards::Status::Busted {
+        // Check if the player busted
+        if pazaak_match.players[i].status == cards::Status::Busted {
             print_log(&format!(
                 "{} {}",
                 player_number_to_identifier(i),
                 messages::BUSTED_MESSAGE
             ));
-            break;
         }
     }
 
-    game.turn = game.turn + 1;
-}
-
-// Show iterable object with indexes
-fn print_options_with_index<T>(vector: &Vec<T>)
-where
-    T: fmt::Display,
-{
-    for (i, object) in vector.iter().enumerate() {
-        println!("{}: {:+}", i, object);
-    }
+    // Increment the turn counter
+    pazaak_match.current_game().turn += 1;
 }
 
 fn take_card_input(player: usize, hand: &cards::Hand) -> Option<usize> {
@@ -260,10 +173,13 @@ fn take_playstyle_input(player_number: usize, special_card: &cards::Card) -> Opt
 fn process_action(
     action: Action,
     player_number: usize,
-    player: &mut cards::Player,
-    player_board: &mut cards::Board,
+    pazaak_match: &mut Match,
     already_played: bool,
 ) -> (bool, bool) {
+    let player = &mut pazaak_match.players[player_number];
+    let player_board =
+        &mut pazaak_match.games[pazaak_match.match_detail.round - 1].board[player_number];
+
     match action {
         Action::Stand => {
             print_log(&get_action_message(player_number, action));
@@ -459,14 +375,30 @@ fn create_card_from_string(card_string: &str) -> Option<cards::Card> {
 fn read_deck_file(path: &str) -> cards::Deck {
     let mut deck = cards::Deck::new();
 
-    let file = std::fs::read_to_string(path).expect("Unable to read file");
+    let mut card_counts: HashMap<SpecialType, i8> = HashMap::new();
+    card_counts.insert(SpecialType::None, 24);
+    card_counts.insert(SpecialType::Invert, 12);
+    card_counts.insert(SpecialType::Flip, 12);
+    card_counts.insert(SpecialType::Double, 1);
+    card_counts.insert(SpecialType::TieBreaker, 1);
 
-    // Various card types
+    let file = std::fs::read_to_string(path).expect("Unable to read file");
 
     for line in file.lines() {
         // create a card based on the regex form of the card
         let card = create_card_from_string(line)
             .expect(&format!("Unable to create card from string for {}", line));
+
+        // Increment the count of the card type
+        let count = card_counts.entry(card.special_type).or_insert(0);
+
+        if count == &0 {
+            eprintln!("{} '{}'", "Too many cards of type:", card.special_type);
+            eprintln!("{} '{}'", "Please resolve invalid Deck at Path:", path);
+            process::exit(1);
+        }
+        *count -= 1;
+
         deck.cards.push(card);
     }
 
@@ -488,44 +420,47 @@ fn main() {
     let opponent_deck_path = &args[2];
     let deck_paths = vec![player_deck_path.to_string(), opponent_deck_path.to_string()];
     validate_deck_paths(&deck_paths);
+    let mut player_deck = read_deck_file(player_deck_path);
+    let mut opponent_deck = read_deck_file(opponent_deck_path);
+    // Shuffle each player's deck
+    player_deck.shuffle();
+    opponent_deck.shuffle();
 
     messages::print_welcome_message();
 
-    let mut pzk_match = cards::Match::new();
+    let mut pzk_match = cards::Match::new(player_deck, opponent_deck);
 
     // Host Match
-    while pzk_match.score[0] < 3 && pzk_match.score[1] < 3 {
-        let player_deck = read_deck_file(player_deck_path);
-        let opponent_deck = read_deck_file(opponent_deck_path);
-        pzk_match.new_game(player_deck, opponent_deck);
+    while pzk_match.match_detail.score[0] < 3 && pzk_match.match_detail.score[1] < 3 {
+        pzk_match.new_game();
 
         // Turn Logic
         loop {
             println!("{}", "===========================".blue());
-            println!("{}", pzk_match);
-            let current_game = pzk_match.current_game();
-            make_turn(current_game);
+            println!("{}", pzk_match.match_detail);
+
+            make_turn(&mut pzk_match);
 
             // Check if both players are standing
-            if current_game.players[0].status == cards::Status::Standing
-                && current_game.players[1].status == cards::Status::Standing
+            if pzk_match.players[0].status == cards::Status::Standing
+                && pzk_match.players[1].status == cards::Status::Standing
             {
                 break;
             }
 
             // Check if a player busted
-            if current_game.players[0].status == cards::Status::Busted
-                || current_game.players[1].status == cards::Status::Busted
+            if pzk_match.players[0].status == cards::Status::Busted
+                || pzk_match.players[1].status == cards::Status::Busted
             {
                 break;
             }
         }
         // Post Game Logic
-        let winner = pzk_match.games[pzk_match.round - 1].check_win();
+        let winner = pzk_match.games[pzk_match.match_detail.round - 1].check_win();
         match winner {
             Some(winner) => {
                 println!("{} wins!", player_number_to_identifier(winner));
-                pzk_match.score[winner] = pzk_match.score[winner] + 1;
+                pzk_match.match_detail.score[winner] = pzk_match.match_detail.score[winner] + 1;
             }
             None => println!("Draw!"),
         }
