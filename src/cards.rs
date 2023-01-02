@@ -96,8 +96,6 @@ impl fmt::Display for Card {
             }
         }
 
-        // Colouring
-
         write!(f, "{}", card_string)
     }
 }

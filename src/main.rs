@@ -77,7 +77,7 @@ fn player_number_to_identifier(player: usize) -> String {
     }
 }
 
-// Expecting a string of "draw", "Stand", or "play" if it isn't one of those then it will return an error
+// Expecting a string of "draw", "stand", or "play" if it isn't one of those then it will return an error
 fn get_input(player: usize) -> Action {
     let mut input = String::new();
 

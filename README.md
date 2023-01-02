@@ -70,6 +70,7 @@ If a round ends in a tie, no player will receive a point. If a player wins a rou
 
 
 # Future Plans
+- [ ] Don't refill hand between rounds
 - [ ] Add 'fill the table' win condition
 - [ ] Restrict deck contents
   - Restrict number of special cards
