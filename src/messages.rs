@@ -11,6 +11,7 @@ pub const ALREADY_PLAYED_MESSAGE: &str =
     "You have already played this turn, please end your turn or stand.";
 pub const DECK_EMPTY: &str = "Deck is empty, please end your turn or stand.";
 pub const DOUBLE_CARD_MESSAGE: &str = "The next card you play will be doubled!";
+pub const BUSTED_MESSAGE: &str = "has busted!";
 
 pub fn print_welcome_message() {
     println!("{}", "===========================".blue().bold());

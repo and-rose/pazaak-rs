@@ -158,7 +158,18 @@ fn make_turn(game: &mut cards::Game) {
                 played_card,
             );
         }
+
+        // Check if player has busted
+        if game.players[i].status == cards::Status::Busted {
+            print_log(&format!(
+                "{} {}",
+                player_number_to_identifier(i),
+                messages::BUSTED_MESSAGE
+            ));
+            break;
+        }
     }
+
     game.turn = game.turn + 1;
 }
 
@@ -324,6 +335,9 @@ fn process_action(
         }
         Action::EndTurn => {
             print_log(&get_action_message(player_number, action));
+            if player_board.total() > 20 {
+                player.status = cards::Status::Busted;
+            }
         }
         Action::Cancel => {
             print_log(&get_action_message(player_number, action));
@@ -497,8 +511,17 @@ fn main() {
             println!("{}", pzk_match);
             let current_game = pzk_match.current_game();
             make_turn(current_game);
+
+            // Check if both players are standing
             if current_game.players[0].status == cards::Status::Standing
                 && current_game.players[1].status == cards::Status::Standing
+            {
+                break;
+            }
+
+            // Check if a player busted
+            if current_game.players[0].status == cards::Status::Busted
+                || current_game.players[1].status == cards::Status::Busted
             {
                 break;
             }
