@@ -18,7 +18,7 @@ pub struct Card {
     pub values_list: Vec<i8>,
     pub value: i8,
     pub special_type: SpecialType,
-    pub board_effect: Option<fn(&mut Board, Vec<i8>)>,
+    pub board_effect: Option<fn(&mut Board, &mut Card)>,
 }
 
 impl Card {
@@ -72,7 +72,11 @@ impl fmt::Display for Card {
                 card_string = card_string.yellow().to_string();
             }
             SpecialType::Double => {
-                card_string.push_str("D");
+                if &self.value != &0 {
+                    card_string.push_str(&format!("{}[D]", self.value));
+                } else {
+                    card_string.push_str("D");
+                }
 
                 card_string = card_string.yellow().to_string();
             }

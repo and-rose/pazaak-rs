@@ -25,13 +25,13 @@ Standard cards are the most common type of card. They have a value of 1-10 and c
 The player can opt to add standard cards to their Side Deck. Players are also able to include standard cards with negative values, however, the board deck will never contain negative values.
 
 ### Specials
-Special cards are a bit more complicated. They can be played to increase or decrease the value of your board by a certain amount. These cards originate from the player's hand and can only be played one at a time (except in the case of the `Double` card). Below are the special cards and their effects.
+Special cards are a bit more complicated. They can be played to increase or decrease the value of your board by a certain amount. These cards originate from the player's hand and can only be played one at a time. Below are the special cards and their effects.
 
 1. Flip (+X/-X)
     - A `Flip` card can have a positive or negative value. When played, the player can choose which value to use. The chosen value will then be added to the board.
 
 2. Double (D)
-    - A `Double` card can be played to double the value of the next card played. This card is the only card that permits multiple cards to be played in a single turn.
+    - A `Double` card can be played to double the last card played on the board. For example, if the player plays a `Double` card after a card with a value of 2, the `Double` card will become a card with a value of 2 too.
 
 3. Invert (X&X)
     - An `Invert` card can be played to invert the value of existing cards on the board. The card will have two values, each of these values will be inverted. For example, if the board has some cards with values of 1, 2, 3, and 4, and the player plays an `Invert` card with values of 2 and 4, the board will now have cards with values of 1, -2, 3, and -4. Similarly, negative values will be inverted to positive values.
