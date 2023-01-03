@@ -1,6 +1,7 @@
 mod cards;
 mod messages;
 mod util;
+mod ai;
 
 use cards::{Match, SpecialType};
 use core::time;
@@ -439,7 +440,8 @@ fn main() {
             println!("{}", "===========================".blue());
             println!("{}", pzk_match.match_detail);
 
-            make_turn(&mut pzk_match);
+            make_turn(&mut pzk_match); // Player turn
+            // make_opponent_turn(); // Opponent turn
 
             // Check if both players are standing
             if pzk_match.players[0].status == cards::Status::Standing
