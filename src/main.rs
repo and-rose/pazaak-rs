@@ -4,12 +4,14 @@ mod messages;
 mod util;
 
 use cards::{Match, SpecialType};
+use core::time;
 use crossterm::style::Stylize;
 use regex::Regex;
 use std::{
     collections::{HashMap, HashSet},
+    env,
     io::Write,
-    process,
+    process, thread,
 };
 use util::{get_action_message, print_action_log, print_log, Action, SPECIAL_CARD_REGEXES};
 
@@ -74,6 +76,16 @@ fn make_turn(pazaak_match: &mut Match) {
 
         let mut is_finished = false;
         let mut played_card = false;
+
+        let best_move = ai::get_best_move(pazaak_match, 100);
+        match best_move {
+            Some(best_move) => {
+                println!("Best move: {:?}", best_move);
+            }
+            None => {
+                println!("No best move found");
+            }
+        }
 
         while !is_finished {
             println!("{}", pazaak_match);
@@ -407,79 +419,78 @@ fn read_deck_file(path: &str) -> cards::Deck {
 }
 
 fn main() {
-    print!("{}", 1 / 0);
-    // let args: Vec<String> = env::args().collect();
+    let args: Vec<String> = env::args().collect();
 
-    // if args.len() < 3 {
-    //     eprintln!(
-    //         "{} {}",
-    //         messages::INVALID_ARGUMENTS_MESSAGE,
-    //         messages::USAGE_MESSAGE
-    //     );
-    //     process::exit(1);
-    // }
-    // let player_deck_path = &args[1];
-    // let opponent_deck_path = &args[2];
-    // let deck_paths = vec![player_deck_path.to_string(), opponent_deck_path.to_string()];
-    // validate_deck_paths(&deck_paths);
-    // let mut player_deck = read_deck_file(player_deck_path);
-    // let mut opponent_deck = read_deck_file(opponent_deck_path);
-    // // Shuffle each player's deck
-    // player_deck.shuffle();
-    // opponent_deck.shuffle();
+    if args.len() < 3 {
+        eprintln!(
+            "{} {}",
+            messages::INVALID_ARGUMENTS_MESSAGE,
+            messages::USAGE_MESSAGE
+        );
+        process::exit(1);
+    }
+    let player_deck_path = &args[1];
+    let opponent_deck_path = &args[2];
+    let deck_paths = vec![player_deck_path.to_string(), opponent_deck_path.to_string()];
+    validate_deck_paths(&deck_paths);
+    let mut player_deck = read_deck_file(player_deck_path);
+    let mut opponent_deck = read_deck_file(opponent_deck_path);
+    // Shuffle each player's deck
+    player_deck.shuffle();
+    opponent_deck.shuffle();
 
-    // messages::print_welcome_message();
+    messages::print_welcome_message();
 
-    // let mut pzk_match = cards::Match::new(player_deck, opponent_deck);
+    let mut pzk_match = cards::Match::new(player_deck, opponent_deck);
 
-    // // Host Match
-    // while pzk_match.match_detail.score[0] < 3 && pzk_match.match_detail.score[1] < 3 {
-    //     pzk_match.new_game();
+    // Host Match
+    while pzk_match.match_detail.score[0] < 3 && pzk_match.match_detail.score[1] < 3 {
+        pzk_match.new_game();
 
-    //     // Turn Logic
-    //     loop {
-    //         println!("{}", "===========================".blue());
-    //         println!("{}", pzk_match.match_detail);
+        // Turn Logic
+        loop {
+            println!("{}", "===========================".blue());
+            println!("{}", pzk_match.match_detail);
 
-    //         make_turn(&mut pzk_match); // Player turn
-    //         // make_opponent_turn(); // Opponent turn
+            make_turn(&mut pzk_match); // Player turn
+                                       // make_opponent_turn(); // Opponent turn
 
-    //         // Check if both players are standing
-    //         if pzk_match.players[0].status == cards::Status::Standing
-    //             && pzk_match.players[1].status == cards::Status::Standing
-    //         {
-    //             break;
-    //         }
+            // Check if both players are standing
+            if pzk_match.players[0].status == cards::Status::Standing
+                && pzk_match.players[1].status == cards::Status::Standing
+            {
+                break;
+            }
 
-    //         // Check if a player busted
-    //         if pzk_match.players[0].status == cards::Status::Busted
-    //             || pzk_match.players[1].status == cards::Status::Busted
-    //         {
-    //             break;
-    //         }
-    //     }
-    //     // Post Game Logic
-    //     let winner = pzk_match.games[pzk_match.match_detail.round - 1].check_win();
-    //     match winner {
-    //         Some(winner) => {
-    //             println!("{} wins!", player_number_to_identifier(winner));
-    //             pzk_match.match_detail.score[winner] = pzk_match.match_detail.score[winner] + 1;
-    //         }
-    //         None => println!("Draw!"),
-    //     }
+            // Check if a player busted
+            if pzk_match.players[0].status == cards::Status::Busted
+                || pzk_match.players[1].status == cards::Status::Busted
+            {
+                break;
+            }
+        }
+        // Post Game Logic
+        let winner = pzk_match.check_win();
+        match winner {
+            Some(winner) => {
+                println!("{} wins!", player_number_to_identifier(winner));
+                pzk_match.match_detail.score[winner] = pzk_match.match_detail.score[winner] + 1;
+            }
+            None => println!("Draw!"),
+        }
 
-    //     // Wait 2000ms
-    //     thread::sleep(time::Duration::from_millis(750));
-    // }
+        // Wait 2000ms
+        thread::sleep(time::Duration::from_millis(750));
+    }
 
-    // // Post Match Logic
-    // println!("{}", "===========================".blue());
-    // println!("{}", pzk_match);
-    // let winner = pzk_match.check_win();
-    // match winner {
-    //     Some(winner) => {
-    //         println!("{} wins!", player_number_to_identifier(winner));
-    //     }
-    //     None => println!("Draw!"),
-    // }
+    // Post Match Logic
+    println!("{}", "===========================".blue());
+    println!("{}", pzk_match);
+    let winner = pzk_match.check_win();
+    match winner {
+        Some(winner) => {
+            println!("{} wins!", player_number_to_identifier(winner));
+        }
+        None => println!("Draw!"),
+    }
 }

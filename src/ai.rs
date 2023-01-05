@@ -9,11 +9,55 @@ use crate::{
 
 /// Simulations is repeated as long as the time to make a move permits.
 /// The implementation here can be changed to be time based instead of a fixed number of simulations.
-pub fn get_best_move(pazaak_match: &Match, simulations: i8) {
+pub fn get_best_move(pazaak_match: &Match, simulations: i8) -> Option<Vec<NodeAction>> {
     let match_number = pazaak_match.match_detail.round - 1;
     let current_game = &pazaak_match.games[match_number];
     let ai_board = &current_game.board[1];
     let ai_hand = &pazaak_match.players[1].hand;
+
+    let root_node = Node {
+        game: current_game.clone(),
+        hand: ai_hand.clone(),
+        parent: None,
+        children: HashMap::new(),
+        visit: 0.0,
+        score: 0.0,
+    };
+
+    for _ in 0..simulations {
+        let mut node = &root_node.clone();
+        node = select(node);
+        expand(&node);
+        let score = simulate(&node);
+        backpropagate(node.clone(), score);
+    }
+
+    let best_node = best_ucb_score(&root_node);
+
+    let mut actions = vec![];
+
+    let mut current_node = best_node;
+
+    // Get the next action that leads to the best node
+    while current_node.parent.is_some() {
+        match &current_node.parent {
+            Some(parent) => {
+                let parent_node = &*parent;
+                for (action, child) in parent_node.children.iter() {
+                    if child == current_node {
+                        actions.push(action.clone());
+                    }
+                }
+
+                current_node = &parent_node;
+            }
+            None => {
+                break;
+            }
+        }
+    }
+
+    return None;
 }
 
 fn select(node: &Node) -> &Node {
@@ -73,7 +117,7 @@ fn expand(node: &Node) {
         let child = Node {
             game: new_game,
             hand: new_hand,
-            parent: Weak::new(),
+            parent: Some(Box::new(current_node.clone())),
             children: HashMap::new(),
             visit: 0.0,
             score: 0.0,
@@ -95,10 +139,35 @@ fn simulate(node: &Node) -> f32 {
         current_node = child;
     }
 
+    // Check if the game was won
+    let winner = node.game.check_win();
+    if winner.is_some() {
+        if winner.unwrap() == 1 {
+            score += 5.0;
+        } else {
+            score -= 5.0;
+        }
+    }
+
     return score;
 }
 
-fn backpropagate(node: &Node, score: f32) {}
+fn backpropagate(node: Node, score: f32) {
+    let mut current_node = node;
+
+    while current_node.parent.is_some() {
+        current_node.visit += 1.0;
+        current_node.score += score;
+        match current_node.parent {
+            Some(parent) => {
+                current_node = *parent;
+            }
+            None => {
+                break;
+            }
+        }
+    }
+}
 
 fn best_ucb_score(node: &Node) -> &Node {
     let parent_node = node;
@@ -112,19 +181,6 @@ fn best_ucb_score(node: &Node) -> &Node {
             best_node = child;
         }
     }
-
-    // for child in node.children {
-    //     let child_ucb = calculate_ucb_score(
-    //         child.score,
-    //         child.visit,
-    //         child.parent.upgrade().unwrap().visit,
-    //     );
-
-    //     if child_ucb >= max_ucb {
-    //         max_ucb = child_ucb;
-    //         best_node = child;
-    //     }
-    // }
 
     return best_node;
 }
@@ -140,17 +196,19 @@ fn calculate_ucb_score(win_score: f32, visit_score: f32, parent_visit_score: f32
     return win_ratio + constant * exploration;
 }
 
-enum NodeAction {
+#[derive(Clone, Debug)]
+pub enum NodeAction {
     EndTurn(i8),
     Play(Card),
     Stand,
 }
 
+#[derive(Clone)]
 struct Node {
     pub game: Game,
     pub hand: Hand,
-    pub parent: Weak<Node>,
-    pub children: HashMap<Vec<Action>, Node>,
+    pub parent: Option<Box<Node>>,
+    pub children: HashMap<Vec<NodeAction>, Node>,
     pub visit: f32,
     pub score: f32,
     // In games where draws are possible,
@@ -169,6 +227,12 @@ impl Node {
             .children
             .values()
             .max_by(|a, b| a.visit.partial_cmp(&b.visit).unwrap());
+    }
+}
+
+impl PartialEq for Node {
+    fn eq(&self, other: &Self) -> bool {
+        return self.game == other.game && self.hand == other.hand;
     }
 }
 

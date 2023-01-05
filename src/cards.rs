@@ -46,6 +46,16 @@ impl Card {
     }
 }
 
+impl std::fmt::Debug for Card {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "Card {{ values_list: {:?}, value: {}, special_type: {} }}",
+            self.values_list, self.value, self.special_type
+        )
+    }
+}
+
 impl fmt::Display for Card {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut card_string = String::new();
@@ -114,7 +124,20 @@ impl fmt::Display for Card {
     }
 }
 
-#[derive(Clone)]
+impl PartialEq for Card {
+    fn eq(&self, other: &Self) -> bool {
+        if self.value == other.value
+            && self.special_type == other.special_type
+            && self.values_list == other.values_list
+        {
+            return true;
+        }
+
+        false
+    }
+}
+
+#[derive(Clone, PartialEq)]
 pub struct Deck {
     pub cards: Vec<Card>,
 }
@@ -168,7 +191,7 @@ impl fmt::Display for Deck {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct Hand {
     pub cards: Vec<Card>,
 }
@@ -278,8 +301,26 @@ impl fmt::Display for Board {
         write!(f, "{} ({})", board_string, self.total())
     }
 }
+
+impl PartialEq for Board {
+    fn eq(&self, other: &Self) -> bool {
+        // Check if the boards are equal by check the value and position of each card
+        if self.cards.len() != other.cards.len() {
+            return false;
+        }
+
+        for i in 0..self.cards.len() {
+            if self.cards[i] != other.cards[i] {
+                return false;
+            }
+        }
+
+        true
+    }
+}
+
 // A Game is a collection of players, boards, and a deck
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct Game {
     pub board: [Board; 2],
     pub deck: Deck,
@@ -306,7 +347,7 @@ impl Game {
     }
 
     // Check which player won the game by comparing the total of their boards and seeing who didn't bust
-    pub fn check_win(&mut self) -> Option<usize> {
+    pub fn check_win(&self) -> Option<usize> {
         let player1_total = self.board[0].total();
         let player2_total = self.board[1].total();
 
