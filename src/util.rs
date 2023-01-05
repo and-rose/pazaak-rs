@@ -2,7 +2,7 @@ use core::time;
 use crossterm::style::Stylize;
 use std::{fmt, thread};
 
-use crate::cards::SpecialType;
+use crate::cards::{self, Card, SpecialType};
 
 // Regex for a card with a value
 pub const CARD_REGEX: &str = r"^([+-]?\d+)$";
@@ -36,7 +36,7 @@ pub enum Action {
     Draw,
     Stand,
     EndTurn,
-    Play,
+    Play(Card),
     Cancel,
     TurnStart,
 }
@@ -46,7 +46,7 @@ impl fmt::Display for Action {
         match self {
             Action::Draw => write!(f, "Draw"),
             Action::Stand => write!(f, "Stand"),
-            Action::Play => write!(f, "Play"),
+            Action::Play(_) => write!(f, "Play"),
             Action::TurnStart => write!(f, "Turn Start"),
             Action::EndTurn => write!(f, "End Turn"),
             Action::Cancel => write!(f, "Cancel"),
@@ -55,6 +55,8 @@ impl fmt::Display for Action {
 }
 
 pub fn get_action_message(player: usize, action: Action) -> String {
+    let card = cards::Card::new(0);
+
     let message = match action {
         Action::Draw => {
             format!("{} Draws...", format!("Player {}", player + 1))
@@ -62,7 +64,7 @@ pub fn get_action_message(player: usize, action: Action) -> String {
         Action::Stand => {
             format!("{} Stands...", format!("Player {}", player + 1))
         }
-        Action::Play => {
+        Action::Play(_) => {
             format!("{} Plays...", format!("Player {}", player + 1))
         }
         Action::TurnStart => {

@@ -1,17 +1,15 @@
+mod ai;
 mod cards;
 mod messages;
 mod util;
-mod ai;
 
 use cards::{Match, SpecialType};
-use core::time;
 use crossterm::style::Stylize;
 use regex::Regex;
 use std::{
     collections::{HashMap, HashSet},
-    env,
     io::Write,
-    process, thread,
+    process,
 };
 use util::{get_action_message, print_action_log, print_log, Action, SPECIAL_CARD_REGEXES};
 
@@ -45,9 +43,11 @@ fn get_input(player: usize) -> Action {
 
     input = input.trim().to_string();
 
+    //TODO: concat the play steps into 1 command
+    let dummy_card = cards::Card::new(-1);
     match input.as_str() {
         "stand" => Action::Stand,
-        "play" => Action::Play,
+        "play" => Action::Play(dummy_card),
         "end" => Action::EndTurn,
         _ => {
             print_log(messages::INVALID_INPUT_MESSAGE);
@@ -186,7 +186,7 @@ fn process_action(
             print_log(&get_action_message(player_number, action));
             player.status = cards::Status::Standing;
         }
-        Action::Play => {
+        Action::Play(_) => {
             if !already_played {
                 print_log(&get_action_message(player_number, action));
 
@@ -407,7 +407,7 @@ fn read_deck_file(path: &str) -> cards::Deck {
 }
 
 fn main() {
-    print!("{}", 1/0);
+    print!("{}", 1 / 0);
     // let args: Vec<String> = env::args().collect();
 
     // if args.len() < 3 {
