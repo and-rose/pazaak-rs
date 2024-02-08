@@ -37,7 +37,6 @@ pub enum Action {
     Stand,
     EndTurn,
     Play,
-    Cancel,
     TurnStart,
 }
 
@@ -49,37 +48,19 @@ impl fmt::Display for Action {
             Action::Play => write!(f, "Play"),
             Action::TurnStart => write!(f, "Turn Start"),
             Action::EndTurn => write!(f, "End Turn"),
-            Action::Cancel => write!(f, "Cancel"),
         }
     }
 }
 
 pub fn get_action_message(player: usize, action: Action) -> String {
-    let message = match action {
-        Action::Draw => {
-            format!("{} Draws...", format!("Player {}", player + 1))
-        }
-        Action::Stand => {
-            format!("{} Stands...", format!("Player {}", player + 1))
-        }
-        Action::Play => {
-            format!("{} Plays...", format!("Player {}", player + 1))
-        }
-        Action::TurnStart => {
-            format!("Starting {}'s Turn...", format!("Player {}", player + 1))
-        }
-        Action::EndTurn => {
-            format!("Ending {}'s Turn...", format!("Player {}", player + 1))
-        }
-        Action::Cancel => {
-            format!(
-                "Cancelling {}'s current action...",
-                format!("Player {}", player + 1)
-            )
-        }
-    };
-
-    message
+    let player_str = format!("Player {}", player + 1);
+    match action {
+        Action::Draw => format!("{} Draws...", player_str),
+        Action::Stand => format!("{} Stands...", player_str),
+        Action::Play => format!("{} Plays...", player_str),
+        Action::TurnStart => format!("Starting {}'s Turn...", player_str),
+        Action::EndTurn => format!("Ending {}'s Turn...", player_str),
+    }
 }
 
 pub fn print_log(message: &str) {
@@ -94,7 +75,7 @@ pub fn print_action_log(player: usize, action: Action) {
 }
 
 // Show iterable object with indexes
-pub fn print_options_with_index<T>(vector: &Vec<T>)
+pub fn print_options_with_index<T>(vector: &[T])
 where
     T: fmt::Display,
 {

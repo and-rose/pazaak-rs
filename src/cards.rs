@@ -54,10 +54,10 @@ impl fmt::Display for Card {
             SpecialType::None => {
                 card_string.push_str(&self.value.to_string());
 
-                if &self.value > &0 {
-                    card_string = card_string.green().to_string();
-                } else if &self.value < &0 {
-                    card_string = card_string.red().to_string();
+                match self.value.cmp(&0) {
+                    std::cmp::Ordering::Greater => card_string.push('+'),
+                    std::cmp::Ordering::Less => card_string.push('-'),
+                    std::cmp::Ordering::Equal => (),
                 }
             }
             SpecialType::Flip => {
@@ -70,7 +70,7 @@ impl fmt::Display for Card {
                     }
 
                     if i != self.values_list.len() - 1 {
-                        card_string.push_str("/");
+                        card_string.push('/');
                     }
                 }
 
@@ -82,31 +82,30 @@ impl fmt::Display for Card {
                 card_string = card_string.yellow().to_string();
             }
             SpecialType::Double => {
-                if &self.value != &0 {
+                if self.value != 0 {
                     card_string.push_str(&format!("{}[D]", self.value));
                 } else {
-                    card_string.push_str("D");
+                    card_string.push('D');
                 }
 
                 card_string = card_string.yellow().to_string();
             }
             SpecialType::TieBreaker => {
                 // put parentheses around the list item that matches the value
-                for (i, v) in self.values_list.iter().enumerate() {
-                    if *v == self.value {
-                        card_string.push_str(&format!("[{:+}]", v));
-                    } else {
-                        card_string.push_str(&format!("{:+}", v));
-                    }
+                let formatted_values = self
+                    .values_list
+                    .iter()
+                    .map(|v| {
+                        if *v == self.value {
+                            format!("[{:+}]", v)
+                        } else {
+                            format!("{:+}", v)
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .join("/");
 
-                    if i != self.values_list.len() - 1 {
-                        card_string.push_str("/");
-                    }
-                }
-
-                card_string.push_str("T");
-
-                card_string = card_string.blue().to_string();
+                card_string = format!("{}T", formatted_values).blue().to_string();
             }
         }
 
@@ -135,34 +134,33 @@ impl Deck {
     }
 
     pub fn default_fill(&mut self) {
-        for _ in 0..4 {
-            for i in 0..10 {
-                self.cards.push(Card {
-                    values_list: vec![i + 1],
-                    value: i + 1,
+        let new_cards = (0..4)
+            .flat_map(|_| {
+                (1..=10).map(|i| Card {
+                    values_list: vec![i],
+                    value: i,
                     special_type: SpecialType::None,
                     board_effect: None,
-                });
-            }
-        }
+                })
+            })
+            .collect::<Vec<_>>();
+
+        self.cards.extend(new_cards);
     }
 }
 
 impl fmt::Display for Deck {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let mut deck_string = String::new();
-
-        if &self.cards.len() == &0 {
+        if self.cards.is_empty() {
             return write!(f, "{}", "<Empty Deck>".to_string().yellow().italic());
         }
 
-        for i in 0..self.cards.len() {
-            deck_string.push_str(&self.cards[i].to_string());
-
-            if i != self.cards.len() - 1 {
-                deck_string.push_str(", ");
-            }
-        }
+        let deck_string = self
+            .cards
+            .iter()
+            .map(|c| c.to_string())
+            .collect::<Vec<_>>()
+            .join(", ");
 
         write!(f, "{}", deck_string)
     }
@@ -180,39 +178,30 @@ impl Hand {
 
     // Gets a string of the hand but with the values hidden by question marks
     pub fn get_anonymous_hand_string(&self) -> String {
-        let mut hand_string = String::new();
-
-        if &self.cards.len() == &0 {
+        if self.cards.is_empty() {
             return "<Empty Hand>".yellow().italic().to_string();
         }
 
-        for i in 0..self.cards.len() {
-            hand_string.push_str("?");
-
-            if i != self.cards.len() - 1 {
-                hand_string.push_str(", ");
-            }
-        }
-
-        hand_string
+        self.cards
+            .iter()
+            .map(|_| "?".to_string())
+            .collect::<Vec<_>>()
+            .join(", ")
     }
 }
 
 impl fmt::Display for Hand {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let mut hand_string = String::new();
-
-        if &self.cards.len() == &0 {
+        if self.cards.is_empty() {
             return write!(f, "{}", "<Empty Hand>".to_string().yellow().italic());
         }
 
-        for i in 0..self.cards.len() {
-            hand_string.push_str(&self.cards[i].to_string());
-
-            if i != self.cards.len() - 1 {
-                hand_string.push_str(", ");
-            }
-        }
+        let hand_string = self
+            .cards
+            .iter()
+            .map(|c| c.to_string())
+            .collect::<Vec<_>>()
+            .join(", ");
 
         write!(f, "{}", hand_string)
     }
@@ -239,41 +228,28 @@ pub struct Board {
 
 impl Board {
     pub fn total(&self) -> i8 {
-        let mut total = 0;
-
-        for i in 0..self.cards.len() {
-            total += self.cards[i].value;
-        }
-
-        total
+        self.cards.iter().map(|c| c.value).sum()
     }
 
     pub fn has_tiebreaker(&self) -> bool {
-        for i in 0..self.cards.len() {
-            if self.cards[i].special_type == SpecialType::TieBreaker {
-                return true;
-            }
-        }
-
-        false
+        self.cards
+            .iter()
+            .any(|c| c.special_type == SpecialType::TieBreaker)
     }
 }
 
 impl fmt::Display for Board {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let mut board_string = String::new();
-
-        if &self.cards.len() == &0 {
+        if self.cards.is_empty() {
             return write!(f, "{}", "<Empty Board>".to_string().yellow().italic());
         }
 
-        for i in 0..self.cards.len() {
-            board_string.push_str(&self.cards[i].to_string());
-
-            if i != self.cards.len() - 1 {
-                board_string.push_str(", ");
-            }
-        }
+        let board_string = self
+            .cards
+            .iter()
+            .map(|c| c.to_string())
+            .collect::<Vec<_>>()
+            .join(", ");
 
         write!(f, "{} ({})", board_string, self.total())
     }
@@ -313,32 +289,24 @@ impl Game {
         let player1_distance = 20 - player1_total;
         let player2_distance = 20 - player2_total;
 
-        if player1_distance < 0 && player2_distance < 0 {
-            // Both players busted
-            return None;
-        } else if player1_distance < 0 {
-            // Player 1 busted
-            return Some(1);
-        } else if player2_distance < 0 {
-            // Player 2 busted
-            return Some(0);
-        } else if player1_distance < player2_distance {
-            // Player 1 is closer to 20
-            return Some(0);
-        } else if player2_distance < player1_distance {
-            // Player 2 is closer to 20
-            return Some(1);
-        } else if player1_distance == player2_distance {
-            // Players are tied
-            if self.board[0].has_tiebreaker() {
-                return Some(0);
-            } else if self.board[1].has_tiebreaker() {
-                return Some(1);
-            } else {
-                return None;
-            }
-        } else {
-            return None;
+        match (player1_distance < 0, player2_distance < 0) {
+            (true, true) => None, // Both players busted
+            (true, _) => Some(1), // Only Player 1 busted
+            (_, true) => Some(0), // Only Player 2 busted
+            _ => match player1_distance.cmp(&player2_distance) {
+                std::cmp::Ordering::Less => Some(0),    // Player 1 is closer
+                std::cmp::Ordering::Greater => Some(1), // Player 2 is closer
+                std::cmp::Ordering::Equal => {
+                    // Tiebreaker logic
+                    if self.board[0].has_tiebreaker() {
+                        Some(0)
+                    } else if self.board[1].has_tiebreaker() {
+                        Some(1)
+                    } else {
+                        None
+                    }
+                }
+            },
         }
     }
 }
@@ -398,39 +366,36 @@ impl Match {
 
     // Check which player won the match by reaching 3 points
     pub fn check_win(&mut self) -> Option<usize> {
-        if self.match_detail.score[0] == 3 {
-            return Some(0);
-        } else if self.match_detail.score[1] == 3 {
-            return Some(1);
-        } else {
-            return None;
+        match self.match_detail.score {
+            [3, _] => Some(0),
+            [_, 3] => Some(1),
+            _ => None,
         }
     }
 }
 
 impl fmt::Display for Match {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let mut game_string = String::new();
         let current_game = &self.games[self.match_detail.round - 1];
 
-        game_string.push_str(&format!(
-            "{}",
-            "---------------------------\n".blue().bold()
-        ));
-        game_string.push_str(&format!("Opponent Board: {}\n", current_game.board[1]));
-        game_string.push_str(&format!(
-            "Opponent Hand: {}\n",
-            &self.players[1].hand.get_anonymous_hand_string()
-        ));
-        game_string.push_str(&format!(
-            "{}",
-            "~~~~~~~~~~~~~~~~~~~~~~~~~~~\n".blue().bold()
-        ));
-        game_string.push_str(&format!("Your Board: {}\n", current_game.board[0]));
-        game_string.push_str(&format!("Your Hand: {}\n", &self.players[0].hand));
-        game_string.push_str(&format!("{}", "---------------------------".blue().bold()));
+        // Start with the opponent's information
+        writeln!(f, "{}", "---------------------------".blue().bold())?;
+        writeln!(f, "Opponent Board: {}", current_game.board[1])?;
+        writeln!(
+            f,
+            "Opponent Hand: {}",
+            self.players[1].hand.get_anonymous_hand_string()
+        )?;
 
-        write!(f, "{}", game_string)
+        // Divider
+        writeln!(f, "{}", "~~~~~~~~~~~~~~~~~~~~~~~~~~~".blue().bold())?;
+
+        // Then, your information
+        writeln!(f, "Your Board: {}", current_game.board[0])?;
+        writeln!(f, "Your Hand: {}", self.players[0].hand)?;
+
+        // End with a closing line
+        writeln!(f, "{}", "---------------------------".blue().bold())
     }
 }
 
@@ -451,23 +416,18 @@ impl MatchDetails {
 
 impl fmt::Display for MatchDetails {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let mut match_string = String::new();
-
-        match_string.push_str(&format!(
-            "{}",
-            "---------------------------\n".blue().bold()
-        ));
-        match_string.push_str(&format!(
-            "Round: {}\n",
-            self.round.to_string().yellow().bold()
-        ));
-        match_string.push_str(&format!(
-            "You: {}  | Opponent: {}\n",
+        // Start with the header
+        writeln!(f, "{}", "---------------------------".blue().bold())?;
+        // Round information
+        writeln!(f, "Round: {}", self.round.to_string().yellow().bold())?;
+        // Score information
+        writeln!(
+            f,
+            "You: {}  | Opponent: {}",
             self.score[0].to_string().green().bold(),
             self.score[1].to_string().red().bold()
-        ));
-        match_string.push_str(&format!("{}", "---------------------------".blue().bold()));
-
-        write!(f, "{}", match_string)
+        )?;
+        // End with a footer
+        writeln!(f, "{}", "---------------------------".blue().bold())
     }
 }

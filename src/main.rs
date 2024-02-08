@@ -3,12 +3,13 @@ mod messages;
 mod util;
 
 use cards::{Match, SpecialType};
+use clap::Parser;
 use core::time;
 use crossterm::style::Stylize;
 use regex::Regex;
 use std::{
     collections::{HashMap, HashSet},
-    env,
+    fs,
     io::Write,
     process, thread,
 };
@@ -28,7 +29,7 @@ fn player_number_to_identifier(player: usize) -> String {
 fn get_input(player: usize) -> Action {
     let mut input = String::new();
 
-    let input_indicator = format!("{}", "(stand, play, end)");
+    let input_indicator = "(stand, play, end)".to_string();
 
     println!(
         "What would you like to do? {}",
@@ -202,7 +203,7 @@ fn process_action(
                                 .collect();
 
                         if additional_input_cards.contains(&card.special_type) {
-                            let result = take_playstyle_input(player_number, &card);
+                            let result = take_playstyle_input(player_number, card);
 
                             match result {
                                 Some(result) => {
@@ -240,10 +241,6 @@ fn process_action(
                 player.status = cards::Status::Busted;
             }
         }
-        Action::Cancel => {
-            print_log(&get_action_message(player_number, action));
-            return (false, false);
-        }
         _ => {
             print_log(&get_action_message(player_number, action));
         }
@@ -273,7 +270,7 @@ fn create_card_from_string(card_string: &str) -> Option<cards::Card> {
     for (card_type, regex) in SPECIAL_CARD_REGEXES.iter() {
         // println!("{:?}: {}", card_type, regex);
         let regex_string = Regex::new(regex).unwrap_or_else(|_| {
-            eprintln!("{} '{}'", "fail", regex);
+            eprintln!("fail '{}'", regex);
             process::exit(1);
         });
         if regex_string.is_match(card_string) {
@@ -338,12 +335,9 @@ fn create_card_from_string(card_string: &str) -> Option<cards::Card> {
                         special_type: *card_type,
                         board_effect: Some(|board, played_card| {
                             // Find out what the last card played was on the board
-                            match board.cards.last() {
-                                Some(last_card) => {
-                                    // If the last card played was a double, play the card again
-                                    played_card.value = last_card.value;
-                                }
-                                None => {}
+                            if let Some(last_card) = board.cards.last() {
+                                // If the last card played was a double, play the card again
+                                played_card.value = last_card.value;
                             }
                         }),
                     });
@@ -375,29 +369,35 @@ fn create_card_from_string(card_string: &str) -> Option<cards::Card> {
 fn read_deck_file(path: &str) -> cards::Deck {
     let mut deck = cards::Deck::new();
 
-    let mut card_counts: HashMap<SpecialType, i8> = HashMap::new();
-    card_counts.insert(SpecialType::None, 24);
-    card_counts.insert(SpecialType::Invert, 12);
-    card_counts.insert(SpecialType::Flip, 12);
-    card_counts.insert(SpecialType::Double, 1);
-    card_counts.insert(SpecialType::TieBreaker, 1);
+    let mut card_counts: HashMap<SpecialType, i8> = [
+        (SpecialType::None, 24),
+        (SpecialType::Invert, 12),
+        (SpecialType::Flip, 12),
+        (SpecialType::Double, 1),
+        (SpecialType::TieBreaker, 1),
+    ]
+    .iter()
+    .cloned()
+    .collect();
 
-    let file = std::fs::read_to_string(path).expect("Unable to read file");
+    let file_content = fs::read_to_string(path)
+        .unwrap_or_else(|_| panic!("Unable to read file at path: {}", path));
 
-    for line in file.lines() {
+    for line in file_content.lines() {
         // create a card based on the regex form of the card
         let card = create_card_from_string(line)
-            .expect(&format!("Unable to create card from string for {}", line));
+            .unwrap_or_else(|| panic!("Unable to create card from string for {}", line));
 
         // Increment the count of the card type
-        let count = card_counts.entry(card.special_type).or_insert(0);
+        let count = card_counts.entry(card.special_type).or_default();
 
-        if count == &0 {
-            eprintln!("{} '{}'", "Too many cards of type:", card.special_type);
-            eprintln!("{} '{}'", "Please resolve invalid Deck at Path:", path);
+        if *count == 0 {
+            eprintln!("Too many cards of type: '{}'", card.special_type);
+            eprintln!("Please resolve invalid Deck at Path: '{}'", path);
             process::exit(1);
+        } else {
+            *count -= 1;
         }
-        *count -= 1;
 
         deck.cards.push(card);
     }
@@ -405,23 +405,28 @@ fn read_deck_file(path: &str) -> cards::Deck {
     deck
 }
 
-fn main() {
-    let args: Vec<String> = env::args().collect();
+#[derive(Parser, Debug)]
+#[clap(author, version, about, long_about = None)]
+struct Args {
+    /// Sets the player deck file path
+    #[clap(value_parser)]
+    player_deck_path: String,
 
-    if args.len() < 3 {
-        eprintln!(
-            "{} {}",
-            messages::INVALID_ARGUMENTS_MESSAGE,
-            messages::USAGE_MESSAGE
-        );
-        process::exit(1);
-    }
-    let player_deck_path = &args[1];
-    let opponent_deck_path = &args[2];
+    /// Sets the opponent deck file path
+    #[clap(value_parser)]
+    opponent_deck_path: String,
+}
+
+fn main() {
+    let args = Args::parse();
+
+    let player_deck_path = args.player_deck_path;
+    let opponent_deck_path = args.opponent_deck_path;
+
     let deck_paths = vec![player_deck_path.to_string(), opponent_deck_path.to_string()];
     validate_deck_paths(&deck_paths);
-    let mut player_deck = read_deck_file(player_deck_path);
-    let mut opponent_deck = read_deck_file(opponent_deck_path);
+    let mut player_deck = read_deck_file(&player_deck_path);
+    let mut opponent_deck = read_deck_file(&opponent_deck_path);
     // Shuffle each player's deck
     player_deck.shuffle();
     opponent_deck.shuffle();
@@ -431,7 +436,7 @@ fn main() {
     let mut pzk_match = cards::Match::new(player_deck, opponent_deck);
 
     // Host Match
-    while pzk_match.match_detail.score[0] < 3 && pzk_match.match_detail.score[1] < 3 {
+    while pzk_match.check_win().is_none() {
         pzk_match.new_game();
 
         // Turn Logic
@@ -442,31 +447,35 @@ fn main() {
             make_turn(&mut pzk_match);
 
             // Check if both players are standing
-            if pzk_match.players[0].status == cards::Status::Standing
-                && pzk_match.players[1].status == cards::Status::Standing
+            if pzk_match
+                .players
+                .iter()
+                .all(|player| player.status == cards::Status::Standing)
             {
                 break;
             }
 
             // Check if a player busted
-            if pzk_match.players[0].status == cards::Status::Busted
-                || pzk_match.players[1].status == cards::Status::Busted
+            if pzk_match
+                .players
+                .iter()
+                .any(|player| player.status == cards::Status::Busted)
             {
                 break;
             }
         }
         // Post Game Logic
-        let winner = pzk_match.games[pzk_match.match_detail.round - 1].check_win();
+        let winner = pzk_match.current_game().check_win();
         match winner {
             Some(winner) => {
                 println!("{} wins!", player_number_to_identifier(winner));
-                pzk_match.match_detail.score[winner] = pzk_match.match_detail.score[winner] + 1;
+                pzk_match.match_detail.score[winner] += 1;
             }
             None => println!("Draw!"),
         }
 
         // Wait 2000ms
-        thread::sleep(time::Duration::from_millis(750));
+        thread::sleep(time::Duration::from_millis(250));
     }
 
     // Post Match Logic
