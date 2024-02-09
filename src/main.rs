@@ -6,54 +6,53 @@ use cards::{Match, SpecialType};
 use clap::Parser;
 use core::time;
 use crossterm::style::Stylize;
-use regex::Regex;
 use std::{
     collections::{HashMap, HashSet},
     fs,
-    io::Write,
+    io::{self, Write},
     process, thread,
 };
-use util::{get_action_message, print_action_log, print_log, Action, SPECIAL_CARD_REGEXES};
+use util::{get_action_message, print_action_log, print_log, Action};
 
-use crate::util::print_options_with_index;
+use crate::util::print_options;
 
-fn player_number_to_identifier(player: usize) -> String {
+fn player_number_to_identifier(player: usize) -> &'static str {
     match player {
-        0 => String::from("You"),
-        1 => String::from("Opponent"),
-        _ => format!("Player {}", player + 1),
+        0 => "You",
+        1 => "Opponent",
+        _ => panic!("Unexpected player number"),
     }
 }
 
 // Expecting a string of "draw", "stand", or "play" if it isn't one of those then it will return an error
 fn get_input(player: usize) -> Action {
-    let mut input = String::new();
-
-    let input_indicator = "(stand, play, end)".to_string();
-
     println!(
         "What would you like to do? {}",
-        input_indicator.yellow().italic()
+        "(stand, play, end)".yellow().italic()
     );
 
     print!("{}> ", player_number_to_identifier(player));
-    std::io::stdout().flush().unwrap();
+    io::stdout().flush().unwrap(); // Ensure the prompt appears immediately
 
-    std::io::stdin()
+    let mut input = String::new();
+    io::stdin()
         .read_line(&mut input)
         .expect("Failed to read line");
 
-    input = input.trim().to_string();
-
-    match input.as_str() {
+    match input.trim() {
         "stand" => Action::Stand,
         "play" => Action::Play,
         "end" => Action::EndTurn,
         _ => {
             print_log(messages::INVALID_INPUT_MESSAGE);
-            get_input(player)
+            get_input(player) // Recursive call for invalid input
         }
     }
+}
+
+struct TurnResult {
+    is_finished: bool,
+    played_card: bool,
 }
 
 fn make_turn(pazaak_match: &mut Match) {
@@ -80,7 +79,10 @@ fn make_turn(pazaak_match: &mut Match) {
 
             // Get the player's input
             let action = get_input(i);
-            (is_finished, played_card) = process_action(action, i, pazaak_match, played_card);
+            TurnResult {
+                is_finished,
+                played_card,
+            } = process_action(action, i, pazaak_match, played_card);
         }
 
         // Check if the player busted
@@ -107,7 +109,7 @@ fn take_card_input(player: usize, hand: &cards::Hand) -> Option<usize> {
         input_indicator.yellow().italic()
     );
 
-    print_options_with_index(&hand.cards);
+    print_options(&hand.cards);
 
     print!("{}> ", player_number_to_identifier(player));
     std::io::stdout().flush().unwrap();
@@ -134,40 +136,38 @@ fn take_card_input(player: usize, hand: &cards::Hand) -> Option<usize> {
 
 // Presents the player with the available methods of playing a card and takes their input
 fn take_playstyle_input(player_number: usize, special_card: &cards::Card) -> Option<usize> {
-    // Display the available options in the cards values with the index beside them
+    let values_count = special_card.values_list.len();
+    if values_count == 0 {
+        return None; // Early return if no options available
+    }
 
-    let available_options = special_card.values_list.len();
-    let input_indicator = format!("(0-{}, cancel)", available_options - 1);
-
+    let input_indicator = format!("(0-{}, cancel)", values_count - 1);
     println!(
         "How would you like to play this card? {}",
         input_indicator.yellow().italic()
     );
-    print_options_with_index(&special_card.values_list);
-
-    let mut input = String::new();
+    print_options(&special_card.values_list);
 
     print!("{}> ", player_number_to_identifier(player_number));
-    std::io::stdout().flush().unwrap();
+    io::stdout().flush().unwrap();
 
-    std::io::stdin()
+    let mut input = String::new();
+    io::stdin()
         .read_line(&mut input)
         .expect("Failed to read line");
 
-    input = input.trim().to_string();
+    let input = input.trim(); // Trim once and use this trimmed version
 
-    // Check if the user cancelled the input
-    if input == "cancel" {
+    if input.eq_ignore_ascii_case("cancel") {
         return None;
     }
 
-    let playstyle_index = input.parse::<usize>().unwrap();
-
-    if playstyle_index > special_card.values_list.len() - 1 {
-        print_log(messages::INVALID_INPUT_MESSAGE);
-        take_playstyle_input(player_number, special_card)
-    } else {
-        Some(playstyle_index)
+    match input.parse::<usize>() {
+        Ok(playstyle_index) if playstyle_index < values_count => Some(playstyle_index),
+        _ => {
+            print_log(messages::INVALID_INPUT_MESSAGE);
+            take_playstyle_input(player_number, special_card) // Recursive call for invalid input
+        }
     }
 }
 
@@ -176,7 +176,7 @@ fn process_action(
     player_number: usize,
     pazaak_match: &mut Match,
     already_played: bool,
-) -> (bool, bool) {
+) -> TurnResult {
     let player = &mut pazaak_match.players[player_number];
     let player_board =
         &mut pazaak_match.games[pazaak_match.match_detail.round - 1].board[player_number];
@@ -210,7 +210,10 @@ fn process_action(
                                     card.resolve_value(result);
                                 }
                                 None => {
-                                    return (false, false);
+                                    return TurnResult {
+                                        is_finished: false,
+                                        played_card: false,
+                                    };
                                 }
                             }
                         }
@@ -224,15 +227,24 @@ fn process_action(
 
                         player_board.cards.push(card);
 
-                        return (false, true);
+                        return TurnResult {
+                            is_finished: false,
+                            played_card: true,
+                        };
                     }
                     None => {
-                        return (false, false);
+                        return TurnResult {
+                            is_finished: false,
+                            played_card: false,
+                        };
                     }
                 }
             } else {
                 print_log(messages::ALREADY_PLAYED_MESSAGE);
-                return (false, true);
+                return TurnResult {
+                    is_finished: false,
+                    played_card: false,
+                };
             }
         }
         Action::EndTurn => {
@@ -246,7 +258,10 @@ fn process_action(
         }
     }
 
-    (true, false)
+    TurnResult {
+        is_finished: true,
+        played_card: false,
+    }
 }
 
 fn validate_deck_paths(paths: &[String]) {
@@ -259,111 +274,6 @@ fn validate_deck_paths(paths: &[String]) {
         print_log(&format!("{} '{}'", "Found Deck Path:", path));
     }
     print_log("Deck Paths Validated!");
-}
-
-fn create_card_from_string(card_string: &str) -> Option<cards::Card> {
-    // Check each regex for a match
-    // If a match is found, create a card based on the regex
-    // If no match is found, return an error
-    // If multiple matches are found, return an error
-
-    for (card_type, regex) in SPECIAL_CARD_REGEXES.iter() {
-        // println!("{:?}: {}", card_type, regex);
-        let regex_string = Regex::new(regex).unwrap_or_else(|_| {
-            eprintln!("fail '{}'", regex);
-            process::exit(1);
-        });
-        if regex_string.is_match(card_string) {
-            // Create a card based on the regex
-            match card_type {
-                SpecialType::None => {
-                    // Create a card based on the regex
-                    let value = regex_string
-                        .captures(card_string)
-                        .unwrap()
-                        .get(1)
-                        .unwrap()
-                        .as_str()
-                        .parse::<i8>()
-                        .unwrap();
-
-                    return Some(cards::Card::new(value));
-                }
-                SpecialType::Flip => {
-                    // Create a card based on the two groups in the first match
-                    let captures = regex_string.captures(card_string).unwrap();
-                    let values: Vec<i8> = captures
-                        .iter()
-                        .skip(1)
-                        .map(|x| x.unwrap().as_str().parse::<i8>().unwrap())
-                        .collect();
-
-                    return Some(cards::Card {
-                        values_list: values,
-                        value: 0,
-                        special_type: *card_type,
-                        board_effect: None,
-                    });
-                }
-                SpecialType::Invert => {
-                    // Create a card based on the regex
-                    let captures = regex_string.captures(card_string).unwrap();
-                    let values: Vec<i8> = captures
-                        .iter()
-                        .skip(1)
-                        .map(|x| x.unwrap().as_str().parse::<i8>().unwrap())
-                        .collect();
-
-                    return Some(cards::Card {
-                        values_list: values,
-                        value: 0,
-                        special_type: *card_type,
-                        board_effect: Some(|board, played_card| {
-                            for card in &mut board.cards {
-                                if played_card.values_list.contains(&card.value) {
-                                    card.value *= -1;
-                                }
-                            }
-                        }),
-                    });
-                }
-                SpecialType::Double => {
-                    // This is the only card that allows playing twice in a row
-                    return Some(cards::Card {
-                        values_list: vec![0],
-                        value: 0,
-                        special_type: *card_type,
-                        board_effect: Some(|board, played_card| {
-                            // Find out what the last card played was on the board
-                            if let Some(last_card) = board.cards.last() {
-                                // If the last card played was a double, play the card again
-                                played_card.value = last_card.value;
-                            }
-                        }),
-                    });
-                }
-                SpecialType::TieBreaker => {
-                    let captures = regex_string.captures(card_string).unwrap();
-                    let values: Vec<i8> = captures
-                        .iter()
-                        .skip(1)
-                        .map(|x| x.unwrap().as_str().parse::<i8>().unwrap())
-                        .collect();
-
-                    return Some(cards::Card {
-                        values_list: values,
-                        value: 0,
-                        special_type: *card_type,
-                        board_effect: None,
-                    });
-                }
-            }
-        }
-    }
-
-    println!("No match found for '{}'", card_string);
-
-    None
 }
 
 fn read_deck_file(path: &str) -> cards::Deck {
@@ -385,8 +295,10 @@ fn read_deck_file(path: &str) -> cards::Deck {
 
     for line in file_content.lines() {
         // create a card based on the regex form of the card
-        let card = create_card_from_string(line)
-            .unwrap_or_else(|| panic!("Unable to create card from string for {}", line));
+        let card = cards::Card::from_string(line).unwrap_or_else(|| {
+            eprintln!("Invalid Card in Deck: '{}'", path);
+            process::exit(1);
+        });
 
         // Increment the count of the card type
         let count = card_counts.entry(card.special_type).or_default();

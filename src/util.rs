@@ -75,11 +75,11 @@ pub fn print_action_log(player: usize, action: Action) {
 }
 
 // Show iterable object with indexes
-pub fn print_options_with_index<T>(vector: &[T])
+pub fn print_options<T>(vector: &[T])
 where
     T: fmt::Display,
 {
-    for (i, object) in vector.iter().enumerate() {
-        println!("{}: {:+}", i, object);
-    }
+    vector.iter().enumerate().for_each(|(i, object)| {
+        println!("{}: {}", i + 1, object);
+    });
 }

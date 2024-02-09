@@ -1,6 +1,9 @@
 use crossterm::style::Stylize;
 use rand::seq::SliceRandom;
+use regex::Regex;
 use std::fmt;
+
+use crate::util::SPECIAL_CARD_REGEXES;
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Debug)]
 pub enum SpecialType {
@@ -44,6 +47,109 @@ impl Card {
     pub fn resolve_value(&mut self, index: usize) {
         self.value = self.values_list[index];
     }
+
+    pub fn from_string(card_string: &str) -> Option<Card> {
+        // Check each regex for a match
+        // If a match is found, create a card based on the regex
+        // If no match is found, return an error
+        // If multiple matches are found, return an error
+
+        for (card_type, regex) in SPECIAL_CARD_REGEXES.iter() {
+            // println!("{:?}: {}", card_type, regex);
+            let regex_string = Regex::new(regex).unwrap_or_else(|_| {
+                panic!("Invalid regex: {}", regex);
+            });
+
+            if regex_string.is_match(card_string) {
+                // Create a card based on the regex
+                match card_type {
+                    SpecialType::None => {
+                        // Create a card based on the regex
+                        let value = regex_string
+                            .captures(card_string)
+                            .unwrap()
+                            .get(1)
+                            .unwrap()
+                            .as_str()
+                            .parse::<i8>()
+                            .unwrap();
+
+                        return Some(Card::new(value));
+                    }
+                    SpecialType::Flip => {
+                        // Create a card based on the two groups in the first match
+                        let captures = regex_string.captures(card_string).unwrap();
+                        let values: Vec<i8> = captures
+                            .iter()
+                            .skip(1)
+                            .map(|x| x.unwrap().as_str().parse::<i8>().unwrap())
+                            .collect();
+
+                        return Some(Card {
+                            values_list: values,
+                            value: 0,
+                            special_type: *card_type,
+                            board_effect: None,
+                        });
+                    }
+                    SpecialType::Invert => {
+                        // Create a card based on the regex
+                        let captures = regex_string.captures(card_string).unwrap();
+                        let values: Vec<i8> = captures
+                            .iter()
+                            .skip(1)
+                            .map(|x| x.unwrap().as_str().parse::<i8>().unwrap())
+                            .collect();
+
+                        return Some(Card {
+                            values_list: values,
+                            value: 0,
+                            special_type: *card_type,
+                            board_effect: Some(|board, played_card| {
+                                for card in &mut board.cards {
+                                    if played_card.values_list.contains(&card.value) {
+                                        card.value *= -1;
+                                    }
+                                }
+                            }),
+                        });
+                    }
+                    SpecialType::Double => {
+                        // This is the only card that allows playing twice in a row
+                        return Some(Card {
+                            values_list: vec![0],
+                            value: 0,
+                            special_type: *card_type,
+                            board_effect: Some(|board, played_card| {
+                                // Find out what the last card played was on the board
+                                if let Some(last_card) = board.cards.last() {
+                                    // If the last card played was a double, play the card again
+                                    played_card.value = last_card.value;
+                                }
+                            }),
+                        });
+                    }
+                    SpecialType::TieBreaker => {
+                        let captures = regex_string.captures(card_string).unwrap();
+                        let values: Vec<i8> = captures
+                            .iter()
+                            .skip(1)
+                            .map(|x| x.unwrap().as_str().parse::<i8>().unwrap())
+                            .collect();
+
+                        return Some(Card {
+                            values_list: values,
+                            value: 0,
+                            special_type: *card_type,
+                            board_effect: None,
+                        });
+                    }
+                }
+            }
+        }
+
+        None
+    }
 }
 
 impl fmt::Display for Card {
@@ -52,12 +158,12 @@ impl fmt::Display for Card {
 
         match self.special_type {
             SpecialType::None => {
-                card_string.push_str(&self.value.to_string());
+                card_string.push_str(&format!("{:}", self.value));
 
                 match self.value.cmp(&0) {
-                    std::cmp::Ordering::Greater => card_string.push('+'),
-                    std::cmp::Ordering::Less => card_string.push('-'),
-                    std::cmp::Ordering::Equal => (),
+                    std::cmp::Ordering::Less => card_string = card_string.red().to_string(),
+                    std::cmp::Ordering::Greater => card_string = card_string.green().to_string(),
+                    _ => {}
                 }
             }
             SpecialType::Flip => {
